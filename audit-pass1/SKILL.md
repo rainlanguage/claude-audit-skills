@@ -1,6 +1,6 @@
 ---
 name: audit-pass1
-description: "Audit Pass 1: Security. Reviews source files for security vulnerabilities including assembly safety, stack protection, reentrancy, and more."
+description: "Audit Pass 1: Security. Reviews source files for security vulnerabilities. Consults CLAUDE.md for project-specific security concerns."
 allowed-tools: Read, Grep, Glob, Bash, Task, Write
 ---
 
@@ -12,22 +12,34 @@ Each pass will need multiple agents to cover the full codebase. When partitionin
 
 Agents are assigned sequential IDs (A01, A02, ...) based on alphabetical order of their source file paths. Each agent prefixes its findings with its ID (e.g., A03-1, A03-2). This produces a stable global ordering: sort by agent ID, then by finding number within each agent. The ordering is deterministic because it derives from the file list, which is fixed for a given codebase snapshot.
 
-Every pass requires reading every assigned file in full. Do not rely on grepping as a substitute for reading — systematic line-by-line review catches issues that keyword searches miss. Grepping is appropriate for cross-referencing (e.g., checking if an error name appears in test files) but not for understanding code.
+Every pass requires reading every assigned file in full. Do not rely on grepping as a substitute for reading — systematic line-by-line review catches issues that keyword searches miss. Grepping is appropriate for cross-referencing but not for understanding code.
 
 After reading each file, the agent must list evidence of thorough reading before reporting findings. For each file, list:
-- The contract/library name
-- Every function name and its line number
-- Every error/event/struct defined (if any)
+- The module/class/contract name
+- Every function/method name and its line number
+- Every type, error, and constant defined (if any)
 
 This evidence must appear in the agent's output before any findings for that file. If the evidence is missing or incomplete, the audit of that file is invalid and must be re-run.
 
 Findings from all passes should be reported, not fixed. Fixes are a separate step after findings are reviewed. Each finding must be classified as one of: **CRITICAL** (exploitable now with direct impact), **HIGH** (significant risk requiring specific conditions), **MEDIUM** (real concern with mitigating factors), **LOW** (minor issue or theoretical risk), **INFO** (observation with no direct risk).
 
-Each agent must write its findings to `audit/<YYYY-MM-DD>-<NN>/pass1/<FileName>.md` where `<NN>` is a zero-padded incrementing integer starting at 01, and `<FileName>` matches the source file name (e.g. `LibEval.md` for `LibEval.sol`). To determine `<NN>`, glob for `audit/<YYYY-MM-DD>-*` and use one higher than the highest existing number, or 01 if none exist. All passes of the same audit share the same `<NN>`. Each audit run uses this namespace so previous runs are preserved as history. Findings that only exist in agent task output are lost when context compacts — the file is the record of truth.
+Each agent must write its findings to `audit/<YYYY-MM-DD>-<NN>/pass1/<FileName>.md` where `<NN>` is a zero-padded incrementing integer starting at 01, and `<FileName>` matches the source file name (without extension). To determine `<NN>`, glob for `audit/<YYYY-MM-DD>-*` and use one higher than the highest existing number, or 01 if none exist. All passes of the same audit share the same `<NN>`. Each audit run uses this namespace so previous runs are preserved as history. Findings that only exist in agent task output are lost when context compacts — the file is the record of truth.
 
 ## Pass 1 Instructions
 
-Review for all security issues. The following are known areas of concern for this codebase, not an exhaustive list:
+Review for all security issues. Check CLAUDE.md for project-specific security concerns. General areas to review include but are not limited to:
+
+- Memory safety: out-of-bounds reads/writes, incorrect pointer arithmetic, missing bounds checks
+- Input validation: untrusted inputs accepted without sanitization, invalid values silently misinterpreted
+- Authentication and authorization: missing access controls, privilege escalation paths
+- Injection: command injection, SQL injection, path traversal, or language-specific equivalents
+- Reentrancy and state consistency: external calls that allow re-entry before state is finalized
+- Arithmetic safety: unchecked overflow/underflow, division by zero, silent wrapping
+- Error handling: missing error checks, errors swallowed silently, inconsistent error conventions
+- Cryptographic issues: weak algorithms, hardcoded secrets, improper randomness
+- Resource management: leaks, unbounded allocation, denial-of-service vectors
+
+### Solidity-Specific Concerns
 
 - Check assembly blocks for memory safety: out-of-bounds reads/writes, incorrect pointer arithmetic, missing bounds checks
 - Verify stack underflow/overflow protection in opcode `run` functions
@@ -36,9 +48,8 @@ Review for all security issues. The following are known areas of concern for thi
 - Verify namespace isolation in the store — `msg.sender` + `StateNamespace` must always scope storage access
 - Check that bytecode hash verification in the expression deployer cannot be bypassed
 - Verify function pointer tables cannot index out of bounds or be manipulated
-- Look for unchecked arithmetic that could silently wrap
 - Check that operand parsing rejects invalid operand values rather than silently misinterpreting them
 - Verify that the eval loop cannot be made to jump to arbitrary code via crafted bytecode
 - Check that context array access is bounds-checked
 - Review extern dispatch for correct encoding/decoding of `ExternDispatchV2`
-- Ensure all reverts use custom errors, not string messages (`revert("...")` is not allowed). Custom errors should be defined in `src/error/`
+- Ensure all reverts use custom errors, not string messages (`revert("...")` is not allowed)
