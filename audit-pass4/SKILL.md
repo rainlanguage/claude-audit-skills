@@ -34,5 +34,5 @@ Review for maintainability, consistency, and good abstractions, including but no
 - Audit for style consistency across the repo — when similar code uses different patterns for the same thing, flag it
 - Identify leaky abstractions: internal details exposed through public interfaces, implementation concerns bleeding across module boundaries, or tight coupling between components that should be independent
 - Review all commented-out code — each instance should be either reinstated or deleted, not left commented
-- Ensure no warnings from the project's build toolchain
+- Ensure no warnings from the project's build toolchain — build warnings are real problems (LOW or higher), not INFO
 - Check that all dependency versions are consistent (no conflicting versions of the same dependency)
