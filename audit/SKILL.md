@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Full audit process for a codebase. Covers all passes (0-4) and triage. Use when starting or reviewing a complete audit.
+description: Full audit process for a codebase. Covers all passes (0-5) and triage. Use when starting or reviewing a complete audit.
 allowed-tools: Read, Grep, Glob, Bash, Task, Write
 ---
 
@@ -23,6 +23,20 @@ This evidence must appear in the agent's output before any findings for that fil
 
 Findings from all passes should be reported, not fixed. Fixes are a separate step after findings are reviewed. A finding must identify an actual problem — something that is wrong, missing, or could go wrong. Correct behavior is not a finding at any severity. Do not report "X works correctly" or "no issues found" as findings.
 
+## Proposed Fixes
+
+Each LOW+ finding must include a proposed fix written to `.fixes/`. This folder is gitignored so proposed fixes never pollute the commit history. Before the first pass, ensure `.fixes` is in `.gitignore` (add it if missing).
+
+For each finding, the agent writes a fix file to `.fixes/<FindingID>.md` containing:
+- The finding ID and title
+- The file path(s) and line number(s) to change
+- The exact proposed fix as a diff or before/after code block
+- For test coverage findings: a complete proposed test file or test function
+
+Every proposed fix must be thorough enough to pass a subsequent audit. For test coverage fixes specifically, this means comprehensive tests covering edge cases, boundary conditions, error paths, and fuzz testing where applicable — not just a single happy-path test. Apply the same rigor described in Pass 2 to any tests written as fixes.
+
+Fix files are written alongside findings during each pass, not deferred to triage. This means when triage presents a finding, the proposed fix is already available for the user to accept, modify, or dismiss. The triage step reads the fix file and presents it with the finding.
+
 Each finding must be classified as one of: **CRITICAL** (exploitable now with direct impact), **HIGH** (significant risk requiring specific conditions), **MEDIUM** (real concern with mitigating factors), **LOW** (minor issue or theoretical risk), **INFO** (suggestion for improvement with no direct risk).
 
 Each agent must write its findings to `audit/<YYYY-MM-DD>-<NN>/pass<M>/<FileName>.md` where `<NN>` is a zero-padded incrementing integer starting at 01, `<M>` is the pass number, and `<FileName>` matches the source file name (without extension). To determine `<NN>`, glob for `audit/<YYYY-MM-DD>-*` and use one higher than the highest existing number, or 01 if none exist. All passes of the same audit share the same `<NN>`. Each audit run uses this namespace so previous runs are preserved as history. Findings that only exist in agent task output are lost when context compacts — the file is the record of truth.
@@ -38,6 +52,8 @@ Before presenting a finding to the user, read the relevant source code and verif
 Present validated findings neutrally and let the user decide the disposition.
 
 When triaging a finding as already FIXED (test already exists), apply the same rigor as writing a new fix: read the actual test code, verify it covers the finding, check for missing edge cases and boundary conditions, and add tests if gaps exist. "Test exists" is not the same as "properly tested." One finding at a time — no batch-marking.
+
+When fixing a finding, follow TDD: write a test that reproduces the bug, run it to confirm it fails, then write the fix and run the test again to confirm it passes. Do not write the fix before running the test and confirming it reproduces the bug. If the bug cannot be reproduced in a test (e.g., memory alignment issues with no observable behavior), state this explicitly when presenting the finding.
 
 ## Pass 0: Process Review
 
@@ -105,3 +121,14 @@ Review for maintainability, consistency, and good abstractions, including but no
 - Review all commented-out code — each instance should be either reinstated or deleted, not left commented
 - Ensure no warnings from the project's build toolchain — build warnings are real problems (LOW or higher), not INFO
 - Check that all dependency versions are consistent (no conflicting versions of the same dependency)
+
+## Pass 5: Correctness / Intent Verification
+
+Verify that every named item (function, test, constant, doc comment) does what it claims. This pass is not about presence/absence (covered by passes 2-4) but about whether the intent expressed by a name, comment, or specification matches the actual behavior. Areas to review include but are not limited to:
+
+- Tests vs. claims: Does each test actually exercise the behavior its name and NatSpec describe?
+- Algorithms and formulas: When code implements a known concept or specification, verify the implementation is correct against the definition
+- Constants and magic numbers: Verify named constants match their documented meaning
+- NatSpec vs. implementation: Verify doc comments accurately describe what the code does
+- Error conditions vs. triggers: Verify each error is triggered by the condition its name describes
+- Interface conformance: When code claims to implement a standard, verify it satisfies all requirements
