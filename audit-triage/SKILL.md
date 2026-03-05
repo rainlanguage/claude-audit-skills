@@ -21,3 +21,5 @@ Before presenting a finding to the user, read the relevant source code and verif
 Present validated findings neutrally and let the user decide the disposition.
 
 When triaging a finding as already FIXED (test already exists), apply the same rigor as writing a new fix: read the actual test code, verify it covers the finding, check for missing edge cases and boundary conditions, and add tests if gaps exist. "Test exists" is not the same as "properly tested." One finding at a time — no batch-marking.
+
+When fixing a PENDING finding, read the corresponding `.fixes/<ID>.md` file first. Use it as the fix plan — the file lists the affected files and proposed approach. If the `.fixes/` file is underspecified, note what's missing but still use it as the starting point rather than re-reading original audit findings and re-deriving the fix independently.

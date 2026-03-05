@@ -6,7 +6,13 @@ allowed-tools: Read, Grep, Glob, Bash, Task, Write
 
 # Audit Review
 
+Before starting, read and follow `~/.claude/skills/audit/GENERAL_RULES.md`.
+
 An audit consists of the passes defined below. All passes are mandatory. Do not combine them into a single pass. Each pass must be run as its own separate conversation to avoid hitting context limits.
+
+**Pass execution order is strictly sequential: 0 → 1 → 2 → 3 → 4 → 5.** Do not start a later pass until the current pass is fully complete and its output file is written to disk. Do not run multiple passes in parallel. Within a single pass, agents reviewing different files MAY run in parallel, but passes themselves are sequential.
+
+**Triage may only begin after all 6 passes are complete and their output files exist on disk.** If `/audit` is invoked and some passes are missing, run the missing passes (in order) before starting triage.
 
 Each pass will need multiple agents to cover the full codebase. When partitioning files across agents, assign one file per agent. This ensures each agent reads its file thoroughly rather than skimming across many files. For passes that require cross-file context (e.g., Pass 2 needs both source and test files), the agent receives the source file plus its corresponding test file(s) — this is still a single-file-per-agent partition from the source file perspective.
 
@@ -23,23 +29,6 @@ This evidence must appear in the agent's output before any findings for that fil
 
 Findings from all passes should be reported, not fixed. Fixes are a separate step after findings are reviewed. A finding must identify an actual problem — something that is wrong, missing, or could go wrong. Correct behavior is not a finding at any severity. Do not report "X works correctly" or "no issues found" as findings.
 
-## Proposed Fixes
-
-Each LOW+ finding must include a proposed fix written to `.fixes/`. This folder is gitignored so proposed fixes never pollute the commit history. Before the first pass, ensure `.fixes` is in `.gitignore` (add it if missing).
-
-For each finding, the agent writes a fix file to `.fixes/<FindingID>.md` containing:
-- The finding ID and title
-- The file path(s) and line number(s) to change
-- The exact proposed fix as a diff or before/after code block
-- For test coverage findings: a complete proposed test file or test function
-
-Every proposed fix must be thorough enough to pass a subsequent audit. For test coverage fixes specifically, this means comprehensive tests covering edge cases, boundary conditions, error paths, and fuzz testing where applicable — not just a single happy-path test. Apply the same rigor described in Pass 2 to any tests written as fixes.
-
-Fix files are written alongside findings during each pass, not deferred to triage. This means when triage presents a finding, the proposed fix is already available for the user to accept, modify, or dismiss. The triage step reads the fix file and presents it with the finding.
-
-Each finding must be classified as one of: **CRITICAL** (exploitable now with direct impact), **HIGH** (significant risk requiring specific conditions), **MEDIUM** (real concern with mitigating factors), **LOW** (minor issue or theoretical risk), **INFO** (suggestion for improvement with no direct risk).
-
-Each agent must write its findings to `audit/<YYYY-MM-DD>-<NN>/pass<M>/<FileName>.md` where `<NN>` is a zero-padded incrementing integer starting at 01, `<M>` is the pass number, and `<FileName>` matches the source file name (without extension). To determine `<NN>`, glob for `audit/<YYYY-MM-DD>-*` and use one higher than the highest existing number, or 01 if none exist. All passes of the same audit share the same `<NN>`. Each audit run uses this namespace so previous runs are preserved as history. Findings that only exist in agent task output are lost when context compacts — the file is the record of truth.
 
 Before starting triage, glob for `audit/*/triage.md` and read the most recent prior triage file (by directory sort order). Any finding in the current audit that duplicates a previously triaged item should be carried forward into the current triage file with its existing status, not re-presented to the user.
 
