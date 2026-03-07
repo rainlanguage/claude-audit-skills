@@ -22,4 +22,6 @@ Present validated findings neutrally and let the user decide the disposition.
 
 When triaging a finding as already FIXED (test already exists), apply the same rigor as writing a new fix: read the actual test code, verify it covers the finding, check for missing edge cases and boundary conditions, and add tests if gaps exist. "Test exists" is not the same as "properly tested." One finding at a time — no batch-marking.
 
+When fixing a finding, follow TDD: write a test that reproduces the bug, run it to confirm it fails, then write the fix and run the test again to confirm it passes. Do not write the fix before running the test and confirming it reproduces the bug. If the bug cannot be reproduced in a test (e.g., memory alignment issues with no observable behavior), state this explicitly when presenting the finding.
+
 When fixing a PENDING finding, read the corresponding `.fixes/<ID>.md` file first. Use it as the fix plan — the file lists the affected files and proposed approach. If the `.fixes/` file is underspecified, note what's missing but still use it as the starting point rather than re-reading original audit findings and re-deriving the fix independently.

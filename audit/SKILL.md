@@ -29,95 +29,19 @@ This evidence must appear in the agent's output before any findings for that fil
 
 Findings from all passes should be reported, not fixed. Fixes are a separate step after findings are reviewed. A finding must identify an actual problem — something that is wrong, missing, or could go wrong. Correct behavior is not a finding at any severity. Do not report "X works correctly" or "no issues found" as findings.
 
+## Pass definitions
 
-Before starting triage, glob for `audit/*/triage.md` and read the most recent prior triage file (by directory sort order). Any finding in the current audit that duplicates a previously triaged item should be carried forward into the current triage file with its existing status, not re-presented to the user.
+Each pass is defined in its own skill file. **The individual pass file is the single source of truth for that pass's instructions.** When editing pass instructions, edit the individual pass file only — do not duplicate pass content here.
+
+- **Pass 0: Process Review** — Read `~/.claude/skills/audit-pass0/SKILL.md`
+- **Pass 1: Security** — Read `~/.claude/skills/audit-pass1/SKILL.md`
+- **Pass 2: Test Coverage** — Read `~/.claude/skills/audit-pass2/SKILL.md`
+- **Pass 3: Documentation** — Read `~/.claude/skills/audit-pass3/SKILL.md`
+- **Pass 4: Code Quality** — Read `~/.claude/skills/audit-pass4/SKILL.md`
+- **Pass 5: Correctness / Intent Verification** — Read `~/.claude/skills/audit-pass5/SKILL.md`
 
 ## Triage
 
-During triage, maintain `audit/<YYYY-MM-DD>-<NN>/triage.md` recording the disposition of every LOW+ finding, keyed by finding ID (e.g., A03-1). Each entry has a status: **FIXED** (code changed), **DOCUMENTED** (documentation/comments added), **DISMISSED** (no action needed), **UPSTREAM** (fix belongs in a dependency/submodule, not this repo), or **PENDING** (not yet triaged). This file is the durable record of triage progress — conversation context is lost on compaction, but the file persists. Before presenting the next finding, check the triage file for the first PENDING ID in sort order.
+Triage instructions are defined in `~/.claude/skills/audit-triage/SKILL.md`. **That file is the single source of truth for triage instructions.** Read it before starting triage.
 
-Before presenting a finding to the user, read the relevant source code and verify the finding is valid. If the finding is incorrect (e.g., describes behavior that doesn't exist, misreads the code, or flags correct behavior as a problem), mark it as DISMISSED with a brief explanation in the triage file and move to the next finding without prompting the user. Only present findings that survive this validation.
-
-Present validated findings neutrally and let the user decide the disposition.
-
-When triaging a finding as already FIXED (test already exists), apply the same rigor as writing a new fix: read the actual test code, verify it covers the finding, check for missing edge cases and boundary conditions, and add tests if gaps exist. "Test exists" is not the same as "properly tested." One finding at a time — no batch-marking.
-
-When fixing a finding, follow TDD: write a test that reproduces the bug, run it to confirm it fails, then write the fix and run the test again to confirm it passes. Do not write the fix before running the test and confirming it reproduces the bug. If the bug cannot be reproduced in a test (e.g., memory alignment issues with no observable behavior), state this explicitly when presenting the finding.
-
-## Pass 0: Process Review
-
-Review project process documents (e.g., CLAUDE.md and any referenced instructions) for issues that would cause future sessions to misinterpret instructions. This pass reviews process documents, not source code. No subagents needed — the documents are small enough to review in the main conversation. Record findings to `audit/<YYYY-MM-DD>-<NN>/pass0/process.md`.
-
-Check for:
-- Ambiguous instructions a future session could misinterpret (e.g. reused placeholder names, unclear defaults)
-- Instructions that are fragile under context compression (e.g. relying on subtle distinctions)
-- Missing defaults or undefined terms
-- Inconsistencies between process documents
-
-## Pass 1: Security
-
-Review for all security issues. Check CLAUDE.md for project-specific security concerns. General areas to review include but are not limited to:
-
-- Memory safety: out-of-bounds reads/writes, incorrect pointer arithmetic, missing bounds checks
-- Input validation: untrusted inputs accepted without sanitization, invalid values silently misinterpreted
-- Authentication and authorization: missing access controls, privilege escalation paths
-- Injection: command injection, SQL injection, path traversal, or language-specific equivalents
-- Reentrancy and state consistency: external calls that allow re-entry before state is finalized
-- Arithmetic safety: unchecked overflow/underflow, division by zero, silent wrapping
-- Error handling: missing error checks, errors swallowed silently, inconsistent error conventions
-- Cryptographic issues: weak algorithms, hardcoded secrets, improper randomness
-- Resource management: leaks, unbounded allocation, denial-of-service vectors
-
-### Solidity-Specific Concerns
-
-- Check assembly blocks for memory safety: out-of-bounds reads/writes, incorrect pointer arithmetic, missing bounds checks
-- Verify stack underflow/overflow protection in opcode `run` functions
-- Check that integrity functions correctly declare inputs/outputs matching what `run` actually consumes/produces
-- Look for reentrancy risks in opcodes that make external calls (ERC20, ERC721, extern)
-- Verify namespace isolation in the store — `msg.sender` + `StateNamespace` must always scope storage access
-- Check that bytecode hash verification in the expression deployer cannot be bypassed
-- Verify function pointer tables cannot index out of bounds or be manipulated
-- Check that operand parsing rejects invalid operand values rather than silently misinterpreting them
-- Verify that the eval loop cannot be made to jump to arbitrary code via crafted bytecode
-- Check that context array access is bounds-checked
-- Review extern dispatch for correct encoding/decoding of `ExternDispatchV2`
-- Ensure all reverts use custom errors, not string messages (`revert("...")` is not allowed)
-
-## Pass 2: Test Coverage
-
-For each source file, read both the source file and its corresponding test file(s). Check CLAUDE.md for project conventions on test file location and naming. Some source files may be tested indirectly by test files elsewhere — grep for the function/type name across the test directory to find where coverage exists. Report all coverage gaps, including but not limited to:
-
-- Source files with no corresponding test file
-- Functions with no test exercising them
-- Error/failure paths with no test triggering them
-- Missing edge case coverage: zero-length inputs, max-length inputs, off-by-one boundaries, odd/even parity
-
-## Pass 3: Documentation
-
-Review all documentation for completeness and accuracy. Check CLAUDE.md for project-specific documentation conventions (e.g., doc comment format, required tags). General checks include but are not limited to:
-
-- Systematically enumerate every public function/method and verify each has documentation
-- Explicitly list undocumented functions as findings
-- Documentation should describe parameters and return values
-- After ensuring documentation exists, review it against the implementation for accuracy
-
-## Pass 4: Code Quality
-
-Review for maintainability, consistency, and good abstractions, including but not limited to:
-
-- Audit for style consistency across the repo — when similar code uses different patterns for the same thing, flag it
-- Identify leaky abstractions: internal details exposed through public interfaces, implementation concerns bleeding across module boundaries, or tight coupling between components that should be independent
-- Review all commented-out code — each instance should be either reinstated or deleted, not left commented
-- Ensure no warnings from the project's build toolchain — build warnings are real problems (LOW or higher), not INFO
-- Check that all dependency versions are consistent (no conflicting versions of the same dependency)
-
-## Pass 5: Correctness / Intent Verification
-
-Verify that every named item (function, test, constant, doc comment) does what it claims. This pass is not about presence/absence (covered by passes 2-4) but about whether the intent expressed by a name, comment, or specification matches the actual behavior. Areas to review include but are not limited to:
-
-- Tests vs. claims: Does each test actually exercise the behavior its name and NatSpec describe?
-- Algorithms and formulas: When code implements a known concept or specification, verify the implementation is correct against the definition
-- Constants and magic numbers: Verify named constants match their documented meaning
-- NatSpec vs. implementation: Verify doc comments accurately describe what the code does
-- Error conditions vs. triggers: Verify each error is triggered by the condition its name describes
-- Interface conformance: When code claims to implement a standard, verify it satisfies all requirements
+Before starting triage, glob for `audit/*/triage.md` and read the most recent prior triage file (by directory sort order). Any finding in the current audit that duplicates a previously triaged item should be carried forward into the current triage file with its existing status, not re-presented to the user.

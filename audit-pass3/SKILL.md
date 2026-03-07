@@ -18,3 +18,7 @@ Review all documentation for completeness and accuracy. Check CLAUDE.md for proj
 - Explicitly list undocumented functions as findings
 - Documentation should describe parameters and return values
 - After ensuring documentation exists, review it against the implementation for accuracy
+- Review README.md and other top-level project documentation (not just code doc comments):
+  - Does the README clearly describe what the project is and its design rationale?
+  - Does the README accurately reflect the current state of the codebase (e.g. current interface/type names, not stale ones)?
+  - Are there dangling references to renamed, removed, or external entities that no longer exist?
