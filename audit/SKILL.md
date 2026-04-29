@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Full audit process for a codebase. Covers all passes (0-5) and triage. Use when starting or reviewing a complete audit.
+description: Full audit process for a codebase. Covers all passes (0-6) and triage. Use when starting or reviewing a complete audit.
 allowed-tools: Read, Grep, Glob, Bash, Task, Write
 ---
 
@@ -8,11 +8,15 @@ allowed-tools: Read, Grep, Glob, Bash, Task, Write
 
 Before starting, read and follow `~/.claude/skills/audit/GENERAL_RULES.md`.
 
-An audit consists of the passes defined below. All passes are mandatory. Do not combine them into a single pass. Each pass must be run as its own separate conversation to avoid hitting context limits.
+An audit consists of the passes defined below. All passes are mandatory. Do not combine them into a single pass.
 
-**Pass execution order is strictly sequential: 0 → 1 → 2 → 3 → 4 → 5.** Do not start a later pass until the current pass is fully complete and its output file is written to disk. Do not run multiple passes in parallel. Within a single pass, agents reviewing different files MAY run in parallel, but passes themselves are sequential.
+**Each pass MUST be executed by file-scoped subagents dispatched via the Agent tool — the parent conversation never reads source files itself for the review.** This keeps the parent's context limited to subagent return summaries (typically just findings) instead of full file contents, so all six passes plus triage fit in a single `/audit` invocation. The parent may dispatch per-file subagents directly in parallel waves, or delegate an entire pass to one orchestrator subagent that spawns its own per-file children — either is valid as long as actual file review happens inside a subagent with a clean context.
 
-**Triage may only begin after all 6 passes are complete and their output files exist on disk.** If `/audit` is invoked and some passes are missing, run the missing passes (in order) before starting triage.
+Pass 0 (Process Review) is the only exception: it covers a handful of small process documents (CLAUDE.md, README, CI YAMLs, etc.) and may be reviewed inline in the parent conversation without subagents.
+
+**Pass execution order is strictly sequential: 0 → 1 → 2 → 3 → 4 → 5 → 6.** Do not start a later pass until the current pass is fully complete and its findings are filed on GitHub. Do not run multiple passes in parallel. Within a single pass, file-scoped subagents MAY run in parallel, but passes themselves are sequential.
+
+**Triage may only begin after all 7 passes are complete and their issues are filed on GitHub.** If `/audit` is invoked and some passes are missing, run the missing passes (in order) before starting triage.
 
 Each pass will need multiple agents to cover the full codebase. When partitioning files across agents, assign one file per agent. This ensures each agent reads its file thoroughly rather than skimming across many files. For passes that require cross-file context (e.g., Pass 2 needs both source and test files), the agent receives the source file plus its corresponding test file(s) — this is still a single-file-per-agent partition from the source file perspective.
 
@@ -39,9 +43,10 @@ Each pass is defined in its own skill file. **The individual pass file is the si
 - **Pass 3: Documentation** — Read `~/.claude/skills/audit-pass3/SKILL.md`
 - **Pass 4: Code Quality** — Read `~/.claude/skills/audit-pass4/SKILL.md`
 - **Pass 5: Correctness / Intent Verification** — Read `~/.claude/skills/audit-pass5/SKILL.md`
+- **Pass 6: Hazard Surface** — Read `~/.claude/skills/audit-pass6/SKILL.md`
 
 ## Triage
 
 Triage instructions are defined in `~/.claude/skills/audit-triage/SKILL.md`. **That file is the single source of truth for triage instructions.** Read it before starting triage.
 
-Before starting triage, glob for `audit/*/triage.md` and read the most recent prior triage file (by directory sort order). Any finding in the current audit that duplicates a previously triaged item should be carried forward into the current triage file with its existing status, not re-presented to the user.
+Before starting triage, list open audit issues with `gh issue list --label audit --state open`. Any finding in the current audit that duplicates a previously closed issue should be closed with a comment referencing the prior issue, not re-presented to the user.
