@@ -12,7 +12,7 @@ Before starting, read and follow `~/.claude/skills/audit/GENERAL_RULES.md`.
 
 ## Pass 0 Instructions
 
-Review project process documents (e.g., CLAUDE.md and any referenced instructions) for issues that would cause future sessions to misinterpret instructions. This pass reviews process documents, not source code. No subagents needed — the documents are small enough to review in the main conversation. Record findings to `audit/<YYYY-MM-DD>-<NN>/pass0/process.md`.
+Review project process documents (e.g., CLAUDE.md and any referenced instructions) for issues that would cause future sessions to misinterpret instructions. This pass reviews process documents, not source code. No subagents needed — the documents are small enough to review in the main conversation. File findings as GitHub issues per GENERAL_RULES.md.
 
 Check for:
 - Ambiguous instructions a future session could misinterpret (e.g. reused placeholder names, unclear defaults)

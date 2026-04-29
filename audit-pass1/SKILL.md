@@ -38,3 +38,22 @@ Review for all security issues. Check CLAUDE.md for project-specific security co
 - Check that context array access is bounds-checked
 - Review extern dispatch for correct encoding/decoding of `ExternDispatchV2`
 - Ensure all reverts use custom errors, not string messages (`revert("...")` is not allowed)
+
+### Rust-Specific Concerns
+
+- Check for `unsafe` blocks and verify their safety invariants are upheld
+- Look for unwrap/expect on fallible operations that could panic in production
+- Verify error handling propagation — no silent drops of `Result`/`Option`
+- Check for integer overflow in release builds (Rust doesn't panic on overflow in release)
+- Review serialization/deserialization for injection or corruption risks
+- Check for TOCTOU races in file/network operations
+- Verify that sensitive data (keys, tokens) is not logged or leaked in error messages
+
+### TypeScript/JavaScript-Specific Concerns
+
+- Check for prototype pollution, XSS, and injection vulnerabilities
+- Verify that user inputs are validated before use in queries, commands, or rendering
+- Look for hardcoded secrets, API keys, or credentials
+- Check for unsafe `eval()`, `Function()`, or template literal injection
+- Verify error handling — no swallowed promises or missing `.catch()` handlers
+- Review dependency usage for known vulnerable patterns

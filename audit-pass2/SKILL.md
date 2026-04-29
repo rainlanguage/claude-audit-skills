@@ -18,3 +18,9 @@ For each source file, read both the source file and its corresponding test file(
 - Functions with no test exercising them
 - Error/failure paths with no test triggering them
 - Missing edge case coverage: zero-length inputs, max-length inputs, off-by-one boundaries, odd/even parity
+
+### Test Location Conventions by Language
+
+- **Solidity** (Foundry): Tests in `test/` directory, typically `*.t.sol` files
+- **Rust**: Tests in `#[cfg(test)] mod tests` within source files, or in `tests/` directories. Integration tests in dedicated crates (e.g., `crates/integration_tests`)
+- **TypeScript**: Tests as `*.test.ts` or `*.spec.ts` alongside source or in `__tests__/` directories

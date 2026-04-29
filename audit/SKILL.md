@@ -10,7 +10,7 @@ Before starting, read and follow `~/.claude/skills/audit/GENERAL_RULES.md`.
 
 An audit consists of the passes defined below. All passes are mandatory. Do not combine them into a single pass.
 
-**Each pass MUST be executed by file-scoped subagents dispatched via the Agent tool — the parent conversation never reads source files itself for the review.** This keeps the parent's context limited to subagent return summaries (typically just findings) instead of full file contents, so all six passes plus triage fit in a single `/audit` invocation. The parent may dispatch per-file subagents directly in parallel waves, or delegate an entire pass to one orchestrator subagent that spawns its own per-file children — either is valid as long as actual file review happens inside a subagent with a clean context.
+**Each pass MUST be executed by file-scoped subagents dispatched via the Agent tool — the parent conversation never reads source files itself for the review.** This keeps the parent's context limited to subagent return summaries (typically just findings) instead of full file contents, so all seven passes plus triage fit in a single `/audit` invocation. The parent may dispatch per-file subagents directly in parallel waves, or delegate an entire pass to one orchestrator subagent that spawns its own per-file children — either is valid as long as actual file review happens inside a subagent with a clean context.
 
 Pass 0 (Process Review) is the only exception: it covers a handful of small process documents (CLAUDE.md, README, CI YAMLs, etc.) and may be reviewed inline in the parent conversation without subagents.
 
