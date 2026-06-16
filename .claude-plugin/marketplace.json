@@ -1,0 +1,18 @@
+{
+  "name": "rainlanguage-audit-skills",
+  "description": "Claude Code audit skills published by rainlanguage.",
+  "owner": {
+    "name": "Rain Open Source Software Ltd",
+    "url": "https://github.com/rainlanguage"
+  },
+  "plugins": [
+    {
+      "name": "audit",
+      "source": "./",
+      "description": "Multi-pass codebase audit: a strictly-sequential pipeline of file-scoped review passes (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface) plus triage, with findings reported (not fixed) and tracked as GitHub issues.",
+      "version": "0.1.0",
+      "author": { "name": "Rain Open Source Software Ltd" },
+      "keywords": ["audit", "security", "code-review", "test-coverage", "correctness", "hazard", "solidity"]
+    }
+  ]
+}
