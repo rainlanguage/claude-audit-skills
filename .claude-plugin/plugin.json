@@ -1,0 +1,15 @@
+{
+  "name": "audit",
+  "displayName": "Audit",
+  "version": "0.1.0",
+  "description": "Multi-pass codebase audit (process, security, test coverage, documentation, code quality, correctness/intent verification, hazard surface) plus triage. Passes run strictly sequentially; file-scoped subagents within each pass read one file in full and report findings (not fixes), tracked as GitHub issues.",
+  "author": {
+    "name": "Rain Open Source Software Ltd",
+    "url": "https://github.com/rainlanguage"
+  },
+  "homepage": "https://github.com/rainlanguage/claude-audit-skills",
+  "repository": "https://github.com/rainlanguage/claude-audit-skills",
+  "license": "LicenseRef-DCL-1.0",
+  "keywords": ["audit", "security", "code-review", "test-coverage", "correctness", "hazard", "solidity", "qa"],
+  "skills": "./skills/"
+}

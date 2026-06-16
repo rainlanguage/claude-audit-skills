@@ -8,7 +8,7 @@ allowed-tools: Read, Grep, Glob, Bash, Task, Write
 
 ## General Rules
 
-Before starting, read and follow `~/.claude/skills/audit/GENERAL_RULES.md`.
+Before starting, read and follow `../audit/GENERAL_RULES.md`.
 
 ## Pass 1 Instructions
 

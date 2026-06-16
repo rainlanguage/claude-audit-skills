@@ -6,7 +6,7 @@ allowed-tools: Read, Grep, Glob, Bash, Task, Write
 
 # Audit Review
 
-Before starting, read and follow `~/.claude/skills/audit/GENERAL_RULES.md`.
+Before starting, read and follow `GENERAL_RULES.md`.
 
 An audit consists of the passes defined below. All passes are mandatory. Do not combine them into a single pass.
 
@@ -37,16 +37,16 @@ Findings from all passes should be reported, not fixed. Fixes are a separate ste
 
 Each pass is defined in its own skill file. **The individual pass file is the single source of truth for that pass's instructions.** When editing pass instructions, edit the individual pass file only — do not duplicate pass content here.
 
-- **Pass 0: Process Review** — Read `~/.claude/skills/audit-pass0/SKILL.md`
-- **Pass 1: Security** — Read `~/.claude/skills/audit-pass1/SKILL.md`
-- **Pass 2: Test Coverage** — Read `~/.claude/skills/audit-pass2/SKILL.md`
-- **Pass 3: Documentation** — Read `~/.claude/skills/audit-pass3/SKILL.md`
-- **Pass 4: Code Quality** — Read `~/.claude/skills/audit-pass4/SKILL.md`
-- **Pass 5: Correctness / Intent Verification** — Read `~/.claude/skills/audit-pass5/SKILL.md`
-- **Pass 6: Hazard Surface** — Read `~/.claude/skills/audit-pass6/SKILL.md`
+- **Pass 0: Process Review** — Read `../audit-pass0/SKILL.md`
+- **Pass 1: Security** — Read `../audit-pass1/SKILL.md`
+- **Pass 2: Test Coverage** — Read `../audit-pass2/SKILL.md`
+- **Pass 3: Documentation** — Read `../audit-pass3/SKILL.md`
+- **Pass 4: Code Quality** — Read `../audit-pass4/SKILL.md`
+- **Pass 5: Correctness / Intent Verification** — Read `../audit-pass5/SKILL.md`
+- **Pass 6: Hazard Surface** — Read `../audit-pass6/SKILL.md`
 
 ## Triage
 
-Triage instructions are defined in `~/.claude/skills/audit-triage/SKILL.md`. **That file is the single source of truth for triage instructions.** Read it before starting triage.
+Triage instructions are defined in `../audit-triage/SKILL.md`. **That file is the single source of truth for triage instructions.** Read it before starting triage.
 
 Before starting triage, list open audit issues with `gh issue list --label audit --state open`. Any finding in the current audit that duplicates a previously closed issue should be closed with a comment referencing the prior issue, not re-presented to the user.
