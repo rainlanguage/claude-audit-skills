@@ -1,12 +1,12 @@
 ---
 name: audit
-description: Full codebase audit — seven review dimensions (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface) plus triage. Reviews EVERY source file across all languages as a whole-repo snapshot (not a diff), reports problems (never fixes them, never "works correctly"), severity-rates each, attaches a concrete proposed fix, and tracks findings as GitHub issues; triage then re-validates each finding against live source and applies fixes TDD-style. Triggers on "audit this codebase", "security review", "full audit", "review the whole repo for bugs/coverage/docs/quality/correctness/hazards", "find what's wrong before an external audit".
-version: 0.1.1
+description: Full codebase audit — eight review dimensions (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface, shell & wrapper surface) plus triage. Reviews EVERY source file across all languages as a whole-repo snapshot (not a diff), reports problems (never fixes them, never "works correctly"), severity-rates each, attaches a concrete proposed fix, and tracks findings as GitHub issues; triage then re-validates each finding against live source and applies fixes TDD-style. Triggers on "audit this codebase", "security review", "full audit", "review the whole repo for bugs/coverage/docs/quality/correctness/hazards/shell", "find what's wrong before an external audit".
+version: 0.2.0
 ---
 
 # Codebase Audit (whole-repo, multi-dimension)
 
-An audit is **seven review dimensions** over the whole codebase, then **triage**:
+An audit is **eight review dimensions** over the whole codebase, then **triage**:
 
 - **0. Process** — the project's instruction docs (CLAUDE.md/AGENTS.md/etc.) for things a future session would misread.
 - **1. Security** — vulnerabilities.
@@ -15,6 +15,7 @@ An audit is **seven review dimensions** over the whole codebase, then **triage**
 - **4. Code quality** — maintainability, consistency, leaky abstractions, portability.
 - **5. Correctness / intent** — does each named thing actually do what its name/comment/spec claims?
 - **6. Hazard surface** — architectural shapes that make a future mistake more likely to land silently in production.
+- **7. Shell & wrapper surface** — untested logic living in shell/CI, and needless indirection wrapping directly-invocable tooling.
 - **Triage** — re-validate each finding against live source, let the owner decide disposition, apply accepted fixes TDD-style.
 
 Two rules sit above everything and never bend:
@@ -22,7 +23,7 @@ Two rules sit above everything and never bend:
 - **Findings are PROBLEMS, not fixes.** A finding must identify something **wrong, missing, or that could go wrong**. Correct behavior is NOT a finding at any severity — never report "X works correctly" or "no issues found". (A *proposed fix* rides along on each finding, but the finding is the problem, not the patch. Fixes are only *applied* in triage.)
 - **Whole-repo snapshot, never a diff.** Every source file is in scope regardless of when it last changed. Do not scope by recent changes / PR diff.
 
-**Run this in ultracode — native Workflow orchestration.** This skill is written for ultracode: an audit is a **fan-out** driven by the native Workflow tool — `agent()` / `parallel()` / `pipeline()`, schema-forced structured findings, and `budget`. The dimensions above are largely **independent file reviews, so fan them out in parallel** (one agent per file × dimension; Pass 6 is the exception — partitioned by category, not file). Let the runtime own concurrency, fan-out, and ordering; the **orchestrator** (the agent authoring the Workflow) owns the file survey, the synthesis/dedup, the security-disclosure gate, and the human-in-the-loop triage loop. Agents review files with clean contexts and **return schema-validated findings** — they do not file issues, write to disk, or hand off between stages.
+**Run this in ultracode — native Workflow orchestration.** This skill is written for ultracode: an audit is a **fan-out** driven by the native Workflow tool — `agent()` / `parallel()` / `pipeline()`, schema-forced structured findings, and `budget`. The dimensions above are largely **independent file reviews, so fan them out in parallel** (one agent per file × dimension; Pass 6 partitions by category not file, and Pass 7 runs over its own shell/CI file set — see each dimension's scope). Let the runtime own concurrency, fan-out, and ordering; the **orchestrator** (the agent authoring the Workflow) owns the file survey, the synthesis/dedup, the security-disclosure gate, and the human-in-the-loop triage loop. Agents review files with clean contexts and **return schema-validated findings** — they do not file issues, write to disk, or hand off between stages.
 
 > This consolidates what used to be nine separate skills run by one conversation. The old machinery — strictly-sequential passes, manual `Agent`-tool dispatch, `A01..` agent IDs for ordering, an "evidence-of-reading" preamble, and filing each finding to GitHub *during* the pass "because context compacts" — all existed only to fit a single context window with a primitive fan-out. Native ultracode removes every one of those constraints: clean per-agent contexts, runtime-owned fan-out/ordering, and structured findings that survive natively. Keep the **review substance** below; drop that scaffolding.
 
@@ -34,7 +35,7 @@ Two rules sit above everything and never bend:
 - TS/JS: `packages/*/src/**/*.{ts,tsx,js,jsx}` (exclude `node_modules/`, `dist/`, `.svelte-kit/`)
 - Svelte: `packages/*/src/**/*.svelte`
 
-Exclude auto-generated files (bindings, build artifacts, `*.pointers.sol` and similar codegen), vendored deps (`lib/`, `node_modules/`), and lock files. When unsure whether a dir is first-party, check for a `Cargo.toml` / `package.json` / manifest. Every dimension reviews **every** language; a dimension's language-specific checklist items apply only to files of that language.
+Exclude auto-generated files (bindings, build artifacts, `*.pointers.sol` and similar codegen), vendored deps (`lib/`, `node_modules/`), and lock files. When unsure whether a dir is first-party, check for a `Cargo.toml` / `package.json` / manifest. Every dimension reviews **every** language; a dimension's language-specific checklist items apply only to files of that language. **Dimension 7 (shell & wrapper) has an additional file set** — shell scripts and CI glue, defined in its own section — that the source dimensions above do NOT review.
 
 **Read in full.** Every assigned file is read top-to-bottom. Grep is for *cross-referencing* (is this name used in tests? does this constant appear elsewhere?), never a substitute for reading code.
 
@@ -61,13 +62,13 @@ Exclude auto-generated files (bindings, build artifacts, `*.pointers.sol` and si
 ## Running the audit as a fan-out
 
 1. **Survey (orchestrator).** Run file discovery once; produce the validated file list (and the set of process docs for Pass 0). Read `CLAUDE.md`/`AGENTS.md` and `audit/known-false-positives.md` once and pass their relevant content into agent prompts as context.
-2. **Fan out dimensions in parallel.** Passes 0–5 are independent file reviews: dispatch one `agent({schema})` per **file × dimension** (or per file with the dimension's full checklist), concurrently. Pass 6 partitions by **hazard category, not file** (each agent scans the whole repo for its category). Each agent reads its file(s) in full and returns schema-validated findings — it does NOT create issues, write files, or order itself. Tier effort: **high** for Security / Correctness / Hazard (and any assembly/`unsafe`/crypto/eval-loop file); **lower** for Docs / naming-style Quality / Process. Some Quality dimensions are repo-global (dependency-version consistency, cross-file style, test-util DRY) — give those one repo-wide agent with the full file set rather than per-file agents that can't see duplication.
+2. **Fan out dimensions in parallel.** Passes 0–5 are independent file reviews: dispatch one `agent({schema})` per **file × dimension** (or per file with the dimension's full checklist), concurrently. Pass 6 partitions by **hazard category, not file** (each agent scans the whole repo for its category). Pass 7 (shell & wrapper) globs its own shell/CI file set (see §7): half A (logic-in-shell) fans out per shell file, half B (over-wrapping) gets one repo-wide agent that can see the whole script→tool graph. Each agent reads its file(s) in full and returns schema-validated findings — it does NOT create issues, write files, or order itself. Tier effort: **high** for Security / Correctness / Hazard (and any assembly/`unsafe`/crypto/eval-loop file); **lower** for Docs / naming-style Quality / Process. Some Quality dimensions are repo-global (dependency-version consistency, cross-file style, test-util DRY) — give those one repo-wide agent with the full file set rather than per-file agents that can't see duplication.
 3. **Loop until dry.** Re-run a dimension/file until it surfaces no new findings; the hazard categories are explicitly non-exhaustive, so keep scanning and accrue newly-discovered patterns as emergent categories. Convergence is orchestrator-controlled (the file/category list is exhausted and a round adds nothing new), never an agent editing shared state.
 4. **Synthesize (orchestrator, high effort, after the fan-out returns).** Collect all structured findings (`.filter(Boolean)`), dedup (cross-category overlaps, e.g. the same duplicate under both "multiple sources of truth" and "configuration spread"; and against `known-false-positives.md` + existing audit issues), and assign stable IDs. A worker's "clean" is an input to audit, not a verdict to relay.
 5. **Apply the security-disclosure gate, then output.** See "Findings → issues" below.
 
 **Schema-force every finding** so format/severity/fix-presence are guaranteed and orderable without manual ID prefixes or evidence-of-reading prose:
-`{ id, dimension (0..6), severity (CRITICAL|HIGH|MEDIUM|LOW|INFO), file, lines, language, description, proposedFix }`.
+`{ id, dimension (0..7), severity (CRITICAL|HIGH|MEDIUM|LOW|INFO), file, lines, language, description, proposedFix }`.
 
 ## The review dimensions
 
@@ -136,12 +137,31 @@ Categories (starting points, NOT exhaustive — anything fitting the framing que
 
 **Every Pass-6 finding names all four parts** (incomplete = revise before filing): (1) **the hazard** — what mistake the shape makes more likely; (2) **the shape that creates it** — the duplicate / ordering / manual step / brittle default; (3) **the realistic scenario** where it silently lands in production; (4) **the structural fix** — generator+check, enumeration test, or redesign. Pass-6 severity: HIGH = corrupts user state/money in a realistic scenario (wrong bridge address, stale codehash admitting a malicious impl, missed key rotation); MEDIUM = silently breaks a feature for some users (website missing a token, indexer crashes on an unknown event); LOW = breaks a dev workflow not production; INFO = a convention kept by discipline today that could be cheaply enforced.
 
+### 7. Shell & wrapper surface (de-bash / de-wrap)
+Reviews **shell and CI glue** for two failure shapes: **logic living in untested shell**, and **indirection wrapping a tool a caller could invoke directly**. Framing question: *"is this shell doing real work a bug could silently break with no test — or is it a layer that earns nothing over a direct call?"* The goal is to **shrink** shell to genuine glue and push logic into tested units, not to document the wrappers.
+
+**File scope (this dimension only):** additionally glob `**/*.sh`, `Makefile` / `*.mk`, `justfile`, the `scripts` block of `package.json`, and inline `run:` steps in `.github/workflows/*.{yml,yaml}` (exclude vendored / `node_modules`). This dimension does NOT review `.sol` / `.rs` / `.ts` source — the other dimensions own those.
+
+**A. Over-bashing — logic living in shell.** Flag shell that decides or transforms data with no test harness behind it:
+- **Untested decision / parse logic** — control flow, classification, or data transformation in shell. Tells: `grep -qE … && do_x` gating an action, `awk` / `sed` extracting structured data, hand-built JSON via string interpolation.
+- **Fragile classification** — control flow gated on a substring / regex of *human-readable* text (error messages, tool prose, bot comments); a reworded input silently breaks the branch. (Same defect the org hit reclassifying on a `readableMsg` — gate on a typed discriminant, not prose.)
+- **Bash foot-guns** — unquoted expansions, `ls | while`, predictable `/tmp` paths (race / clobber), `--exclude-dir` anchoring bugs, missing `set -euo pipefail`, `|| true` swallowing a real error, `for x in $(...)` word-splitting.
+
+**B. Over-wrapping — needless indirection over tooling.** A wrapper is justified ONLY when it adds something a direct call can't. Flag:
+- **Thin pass-through wrappers** — a script / Makefile target / npm script / alias whose whole body is arg-munging + one underlying tool call. If a nix package / binary can be invoked directly (`nix run .#bin`, on PATH via the devshell), the wrapper is dead weight — and is itself untested shell. (Org direction: de-bashed logic ships as flake packages invoked directly, never behind a wrapper.)
+- **Redundant abstraction layers** — script→script→tool chains; a repo-local reimplementation of what a reusable / flake already provides; config that exists only to feed a wrapper that exists only to call a tool.
+- **Wrapper as the only home for logic** — if a wrapper contains real logic, that's an over-bash finding (half A); if it contains none, that's an over-wrap finding. Every wrapper is one or the other unless it earns its keep.
+
+**Non-findings (do NOT flag):** genuine glue wiring several tools together, true one-liners, shell already covered by BATS / tests, and a wrapper that adds real value a direct call can't (env setup, genuine multi-tool orchestration).
+
+**Severity by blast radius:** CI-gating or state-mutating logic / indirection in untested shell = **MEDIUM+**; local-convenience shell = **LOW**. **Proposed fix:** extract the logic to a tested unit (org pattern: a Rust flake package) and invoke it directly; delete pure pass-through wrappers.
+
 ## Findings → issues (output)
 
 Findings are tracked as **GitHub issues** (the durable product record). The orchestrator files them once, after synthesis — not per-agent mid-run.
 
 - **Security-disclosure gate (mandatory):** **CRITICAL and HIGH findings may be exploitable — do NOT auto-file them as public issues.** Present them to the user locally; the user decides whether to file publicly or fix first. Only **MEDIUM / LOW / INFO** are auto-filed.
-- **Issue shape:** Title `[<FindingID>] [<SEVERITY>] <short description>`; Labels `audit`, `pass<N>` (the dimension), and the lowercase severity; Body = description + file path(s)/line(s) + the proposed fix. Ensure the label set exists first (`gh label list`; create any missing from `audit, pass0..pass6, critical, high, medium, low, info`).
+- **Issue shape:** Title `[<FindingID>] [<SEVERITY>] <short description>`; Labels `audit`, `pass<N>` (the dimension), and the lowercase severity; Body = description + file path(s)/line(s) + the proposed fix. Ensure the label set exists first (`gh label list`; create any missing from `audit, pass0..pass7, critical, high, medium, low, info`).
 
 ## Triage (the one serial, human-in-the-loop stage)
 
