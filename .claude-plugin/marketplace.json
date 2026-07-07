@@ -10,7 +10,7 @@
       "name": "audit",
       "source": "./",
       "description": "Multi-pass codebase audit: a strictly-sequential pipeline of file-scoped review passes (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface) plus triage, with findings reported (not fixed) and tracked as GitHub issues.",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "author": { "name": "Rain Open Source Software Ltd" },
       "keywords": ["audit", "security", "code-review", "test-coverage", "correctness", "hazard", "solidity"]
     }
