@@ -181,6 +181,7 @@ Every completed **whole-repo** run commits a durable, machine-readable record of
 - **`.audit/last-run.json`** — the stamp:
   ```json
   {
+    "scope": "whole-repo",
     "auditedAt": "2026-07-07T22:00:00Z",
     "auditedCommit": "<full 40-char SHA that was audited>",
     "skillVersion": "<this skill's version>",
@@ -189,6 +190,8 @@ Every completed **whole-repo** run commits a durable, machine-readable record of
   }
   ```
   `auditedAt` is UTC ISO-8601 at run completion; `auditedCommit` is the SHA the Survey snapshot was taken at; `fileCount` is the number of first-party files reviewed.
+
+  **`scope` is the accuracy discriminator and MUST be exactly the string `whole-repo` for a full audit — nothing else means whole-repo.** This skill is also invoked *scoped* (the vetter and producer run it against only a PR's changed files); a scoped run MUST NOT write a `whole-repo` stamp. It either writes no stamp, or a stamp whose `scope` is an explicitly non-whole value — `pr:<number>` (a PR-scoped review) or `paths:<comma-separated globs>` (a path-scoped review). A consumer counts a repo as *fully audited at `auditedAt`* **only** when `scope == "whole-repo"`; every other value (or a missing/partial stamp) means "not fully audited", so a PR-scoped run can never masquerade as a full audit.
 - **`.audit/scope.json`** — the scope manifest that substantiates "full repo": the enumerated whole-repo snapshot.
   ```json
   {
