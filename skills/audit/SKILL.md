@@ -1,7 +1,7 @@
 ---
 name: audit
 description: Full codebase audit — seven review dimensions (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface) plus triage. Reviews EVERY source file across all languages as a whole-repo snapshot (not a diff), reports problems (never fixes them, never "works correctly"), severity-rates each, attaches a concrete proposed fix, and tracks findings as GitHub issues; triage then re-validates each finding against live source and applies fixes TDD-style. Triggers on "audit this codebase", "security review", "full audit", "review the whole repo for bugs/coverage/docs/quality/correctness/hazards", "find what's wrong before an external audit".
-version: 0.9.0
+version: 0.10.0
 ---
 
 # Codebase Audit (whole-repo, multi-dimension)
