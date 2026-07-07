@@ -1,7 +1,7 @@
 ---
 name: audit
 description: Full codebase audit — seven review dimensions (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface) plus triage. Reviews EVERY source file across all languages as a whole-repo snapshot (not a diff), reports problems (never fixes them, never "works correctly"), severity-rates each, attaches a concrete proposed fix, and tracks findings as GitHub issues; triage then re-validates each finding against live source and applies fixes TDD-style. Triggers on "audit this codebase", "security review", "full audit", "review the whole repo for bugs/coverage/docs/quality/correctness/hazards", "find what's wrong before an external audit".
-version: 0.1.0
+version: 0.1.1
 ---
 
 # Codebase Audit (whole-repo, multi-dimension)
@@ -108,7 +108,7 @@ Review for maintainability, consistency, and good abstractions across the whole 
 3. **Commented-out code** — each instance should be reinstated or deleted, not left commented.
 4. **Build warnings** — no warnings from the project's toolchain; build warnings are real problems (**LOW or higher, NOT INFO**).
 5. **Dependency version consistency** — no conflicting versions of the same dependency.
-6. **Solidity bare `src/` imports** — flag bare `src/...` import paths in ALL `.sol` files **including test and script files** (they break when the project is a git submodule, where `src/` resolves to the consumer's source dir). Fix to relative (`../../src/lib/Foo.sol`) or remapped (`projectname/lib/Foo.sol`) paths. Do NOT dismiss test-file occurrences as out of scope — tests must compile when the repo is a dependency.
+6. **Solidity bare first-party imports** — flag bare `src/...` **and** bare `test/...` import paths in ALL `.sol` files — source, test, **AND `script/`** files alike (they break when the project is a git submodule / soldeer dependency, where `src/` resolves to the *consumer's* source dir). Fix to relative (`../../src/lib/Foo.sol`) or remapped (`projectname/lib/Foo.sol`) paths. Do NOT dismiss `test/` **or `script/`** occurrences as out of scope or "operator tooling" — every first-party `.sol` (including `script/` deploy/build helpers) must compile when the repo is consumed as a dependency. **This finding is only complete when it enumerates the bare imports across ALL first-party dirs — `src/`, `test/`, AND `script/`.** Fixing only the test files (or only `src/`) leaves the category unresolved: a partial fix is still a finding.
 7. **Test-util DRY** — before reviewing tests, read existing helpers (`test/util/lib/*.sol`, `test/util/abstract/*.sol`); flag inline boilerplate that duplicates or could use an existing helper (e.g. hand-building config structs when a `default*` builder exists; inline log decoding when an `extract*FromLogs` helper exists; repeated multi-line patterns that should be a shared helper).
 8. **Variable naming** — apply the naming rule from Shared rules (flag short/meaningless names as LOW).
 
