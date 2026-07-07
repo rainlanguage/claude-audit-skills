@@ -1,7 +1,7 @@
 ---
 name: audit
 description: Full codebase audit — seven review dimensions (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface) plus triage. Reviews EVERY source file across all languages as a whole-repo snapshot (not a diff), reports problems (never fixes them, never "works correctly"), severity-rates each, attaches a concrete proposed fix, and tracks findings as GitHub issues; triage then re-validates each finding against live source and applies fixes TDD-style. Triggers on "audit this codebase", "security review", "full audit", "review the whole repo for bugs/coverage/docs/quality/correctness/hazards", "find what's wrong before an external audit".
-version: 0.8.0
+version: 0.9.0
 ---
 
 # Codebase Audit (whole-repo, multi-dimension)
@@ -83,6 +83,7 @@ Exclude auto-generated files (bindings, build artifacts, `*.pointers.sol` and si
   - **Test both axes** (test coverage): every `supportsInterface` needs a test asserting (a) **each** advertised id → `true` (not just one), and (b) unsupported ids → `false` — ideally a fuzz over `bytes4` excluding the advertised ids, PLUS the mandatory ERC-165 `0xffffffff` sentinel → `false`. A positive-only or single-interface test is insufficient on both axes.
 
   Severity **LOW/INFO** by default; **MEDIUM+** when a real consumer relies on the discovery.
+- **Shared-CI reusable workflow refs pin `@main` (rainlanguage).** rainlanguage repos reference the shared rainix reusable workflows (`uses: rainlanguage/rainix/.github/workflows/*.yaml@main`) at **`@main` by deliberate org convention** — this is the shared-CI model, where a rainix CI fix (e.g. the api.github.com 429 mitigation) propagates to every consumer repo instantly. Do **NOT** flag `@main` on a rainix reusable as a "non-reproducible / silently-mutable CI" hazard, and do **NOT** propose pinning it to an immutable SHA. Every repo in the org uses `@main`, so pinning one repo makes it the sole outlier AND creates an N-repo SHA-bump treadmill that defeats the point of a shared reusable — the classic drift-vs-canonical false positive (co-occurring `@main` across the org **is** the declared convention here). If the org ever wants reproducible pinned CI, that is a single org-wide decision — a rainix **release tag** plus a tracked bump mechanism across all repos — never a per-repo SHA pin, and least of all a pin to an already-stale SHA.
 
 ## Running the audit as a fan-out
 
