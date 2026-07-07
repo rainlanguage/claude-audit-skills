@@ -1,7 +1,7 @@
 {
   "name": "audit",
   "displayName": "Audit",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Multi-pass codebase audit (process, security, test coverage, documentation, code quality, correctness/intent verification, hazard surface) plus triage. Passes run strictly sequentially; file-scoped subagents within each pass read one file in full and report findings (not fixes), tracked as GitHub issues.",
   "author": {
     "name": "Rain Open Source Software Ltd",
