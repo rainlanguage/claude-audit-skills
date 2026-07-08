@@ -1,7 +1,7 @@
 ---
 name: audit
 description: Full codebase audit — seven review dimensions (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface) plus triage. Reviews EVERY source file across all languages as a whole-repo snapshot (not a diff), reports problems (never fixes them, never "works correctly"), severity-rates each, attaches a concrete proposed fix, and tracks findings as GitHub issues; triage then re-validates each finding against live source and applies fixes TDD-style. Triggers on "audit this codebase", "security review", "full audit", "review the whole repo for bugs/coverage/docs/quality/correctness/hazards", "find what's wrong before an external audit".
-version: 0.11.0
+version: 0.12.0
 ---
 
 # Codebase Audit (whole-repo, multi-dimension)
@@ -187,11 +187,12 @@ Every completed **whole-repo** run commits a durable, machine-readable record of
     "auditedAt": "2026-07-07T22:00:00Z",
     "auditedCommit": "<full 40-char SHA that was audited>",
     "skillVersion": "<this skill's version>",
+    "skillCommit": "<full 40-char rainlanguage/claude-audit-skills SHA this skill ran from>",
     "dimensions": ["process", "security", "test-coverage", "documentation", "code-quality", "correctness", "hazard-surface"],
     "fileCount": 0
   }
   ```
-  `auditedAt` is UTC ISO-8601 at run completion; `auditedCommit` is the SHA the Survey snapshot was taken at; `fileCount` is the number of first-party files reviewed.
+  `auditedAt` is UTC ISO-8601 at run completion; `auditedCommit` is the SHA the Survey snapshot was taken at; `fileCount` is the number of first-party files reviewed. `skillVersion` is the skill's declared version; **`skillCommit` is the exact `rainlanguage/claude-audit-skills` commit the running skill was installed from** — the precise, unambiguous record of *which audit-skill code produced this audit* (a version string like `0.11.0` can map to many commits, or to a dev/uncommitted state). Resolve it from the plugin's install / marketplace metadata (or `git rev-parse HEAD` in the skill's source checkout); if it genuinely cannot be determined, set it to `null` rather than guessing.
 
   **`scope` is the accuracy discriminator and MUST be exactly the string `whole-repo` for a full audit — nothing else means whole-repo.** This skill is also invoked *scoped* (the vetter and producer run it against only a PR's changed files); a scoped run MUST NOT write a `whole-repo` stamp. It either writes no stamp, or a stamp whose `scope` is an explicitly non-whole value — `pr:<number>` (a PR-scoped review) or `paths:<comma-separated globs>` (a path-scoped review). A consumer counts a repo as *fully audited at `auditedAt`* **only** when `scope == "whole-repo"`; every other value (or a missing/partial stamp) means "not fully audited", so a PR-scoped run can never masquerade as a full audit.
 - **`.audit/scope.json`** — the scope manifest that substantiates "full repo": the enumerated whole-repo snapshot.
