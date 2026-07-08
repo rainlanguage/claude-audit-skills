@@ -1,7 +1,7 @@
 ---
 name: audit
 description: Full codebase audit — seven review dimensions (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface) plus triage. Reviews EVERY source file across all languages as a whole-repo snapshot (not a diff), reports problems (never fixes them, never "works correctly"), severity-rates each, attaches a concrete proposed fix, and tracks findings as GitHub issues; triage then re-validates each finding against live source and applies fixes TDD-style. Triggers on "audit this codebase", "security review", "full audit", "review the whole repo for bugs/coverage/docs/quality/correctness/hazards", "find what's wrong before an external audit".
-version: 0.9.0
+version: 0.10.0
 ---
 
 # Codebase Audit (whole-repo, multi-dimension)
@@ -174,6 +174,36 @@ Findings are tracked as **GitHub issues** (the durable product record). The orch
 
 - **Security-disclosure gate (mandatory):** **CRITICAL and HIGH findings may be exploitable — do NOT auto-file them as public issues.** Present them to the user locally; the user decides whether to file publicly or fix first. Only **MEDIUM / LOW / INFO** are auto-filed.
 - **Issue shape:** Title `[<FindingID>] [<SEVERITY>] <short description>`; Labels `audit`, `pass<N>` (the dimension), and the lowercase severity; Body = description + file path(s)/line(s) + the proposed fix. Ensure the label set exists first (`gh label list`; create any missing from `audit, pass0..pass6, critical, high, medium, low, info`).
+
+## Run stamp & scope (per-run record)
+
+Every completed **whole-repo** run commits a durable, machine-readable record of *when* the repo was last fully audited and *what* was in scope — so tooling (e.g. the `rain-org-health` scan) can surface each repo's audit recency, and a reader can verify the run was whole-repo (not a diff / PR-scoped review). Write two files at the repo root and commit them to the default branch (open a small PR if it is branch-protected). **Emit them even when the run finds zero issues** — the stamp records the *run*, not the findings.
+
+- **`.audit/last-run.json`** — the stamp:
+  ```json
+  {
+    "scope": "whole-repo",
+    "auditedAt": "2026-07-07T22:00:00Z",
+    "auditedCommit": "<full 40-char SHA that was audited>",
+    "skillVersion": "<this skill's version>",
+    "dimensions": ["process", "security", "test-coverage", "documentation", "code-quality", "correctness", "hazard-surface"],
+    "fileCount": 0
+  }
+  ```
+  `auditedAt` is UTC ISO-8601 at run completion; `auditedCommit` is the SHA the Survey snapshot was taken at; `fileCount` is the number of first-party files reviewed.
+
+  **`scope` is the accuracy discriminator and MUST be exactly the string `whole-repo` for a full audit — nothing else means whole-repo.** This skill is also invoked *scoped* (the vetter and producer run it against only a PR's changed files); a scoped run MUST NOT write a `whole-repo` stamp. It either writes no stamp, or a stamp whose `scope` is an explicitly non-whole value — `pr:<number>` (a PR-scoped review) or `paths:<comma-separated globs>` (a path-scoped review). A consumer counts a repo as *fully audited at `auditedAt`* **only** when `scope == "whole-repo"`; every other value (or a missing/partial stamp) means "not fully audited", so a PR-scoped run can never masquerade as a full audit.
+- **`.audit/scope.json`** — the scope manifest that substantiates "full repo": the enumerated whole-repo snapshot.
+  ```json
+  {
+    "auditedAt": "<same as the stamp>",
+    "auditedCommit": "<same as the stamp>",
+    "files": ["src/…", "test/…", "script/…", "crates/…/src/…", "packages/…/src/…"],
+    "countsByLanguage": { "solidity": 0, "rust": 0, "typescript": 0, "svelte": 0 }
+  }
+  ```
+
+A consumer compares `auditedCommit` to the current default-branch HEAD to tell whether the audit is stale. Commit message: `audit: record run stamp + scope (<skillVersion>)`. Keep `.audit/` **out of** the audit's own file-discovery globs — it is a generated record, not first-party source.
 
 ## Triage (the one serial, human-in-the-loop stage)
 
