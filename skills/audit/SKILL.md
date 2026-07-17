@@ -181,34 +181,26 @@ Findings are tracked as **GitHub issues** (the durable product record). The orch
 
 ## Run stamp & scope (per-run record)
 
-Every completed **whole-repo** run commits a durable, machine-readable record of *when* the repo was last fully audited and *what* was in scope — so tooling (e.g. the `rain-org-health` scan) can surface each repo's audit recency, and a reader can verify the run was whole-repo (not a diff / PR-scoped review). Write two files at the repo root and commit them to the default branch (open a small PR if it is branch-protected). **Emit them even when the run finds zero issues** — the stamp records the *run*, not the findings.
+Every completed **whole-repo** run **appends** a durable, machine-readable record of *when* the repo was last fully audited and *what* was in scope — so tooling (e.g. the `rain-org-health` scan) can surface each repo's audit recency, and a reader can verify the run was whole-repo (not a diff / PR-scoped review). Write two files at the repo root and commit them to the default branch (open a small PR if it is branch-protected). **Emit them even when the run finds zero issues** — the stamp records the *run*, not the findings.
 
-- **`.audit/last-run.json`** — the stamp:
+- **`.audit/runs.jsonl`** — the stamp, **appended** as one JSON object per line ([JSON Lines](https://jsonlines.org)), newest LAST. Append the new line; **never rewrite or truncate the existing lines.** The file is the repo's audit *history*: each run adds a line rather than clobbering the previous one, so a repo audited at several commits over time keeps every record (audit cadence is preserved, not thrown away), and it matches the org's existing `metrics/runs.jsonl` convention. Append:
   ```json
-  {
-    "scope": "whole-repo",
-    "auditedAt": "2026-07-07T22:00:00Z",
-    "auditedCommit": "<full 40-char SHA that was audited>",
-    "skillVersion": "<this skill's version>",
-    "skillCommit": "<full 40-char rainlanguage/claude-audit-skills SHA this skill ran from>",
-    "dimensions": ["process", "security", "test-coverage", "documentation", "code-quality", "correctness", "hazard-surface"],
-    "fileCount": 0
-  }
+  {"scope":"whole-repo","auditedAt":"2026-07-07T22:00:00Z","auditedCommit":"<full 40-char SHA that was audited>","skillVersion":"<this skill's version>","skillCommit":"<full 40-char rainlanguage/claude-audit-skills SHA this skill ran from>","dimensions":["process","security","test-coverage","documentation","code-quality","correctness","hazard-surface"],"fileCount":0}
   ```
-  `auditedAt` is UTC ISO-8601 at run completion; `auditedCommit` is the SHA the Survey snapshot was taken at; `fileCount` is the number of first-party files reviewed. `skillVersion` is the skill's declared version; **`skillCommit` is the exact `rainlanguage/claude-audit-skills` commit the running skill was installed from** — the precise, unambiguous record of *which audit-skill code produced this audit* (a version string like `0.11.0` can map to many commits, or to a dev/uncommitted state). Resolve it from the plugin's install / marketplace metadata (or `git rev-parse HEAD` in the skill's source checkout); if it genuinely cannot be determined, set it to `null` rather than guessing.
+  `auditedAt` is UTC ISO-8601 at run completion; `auditedCommit` is the SHA the Survey snapshot was taken at; `fileCount` is the number of first-party files reviewed. `skillVersion` is the skill's declared version; **`skillCommit` is the exact `rainlanguage/claude-audit-skills` commit the running skill was installed from** — the precise, unambiguous record of *which audit-skill code produced this audit* (a version string like `0.11.0` can map to many commits, or to a dev/uncommitted state). Resolve it from the plugin's install / marketplace metadata (or `git rev-parse HEAD` in the skill's source checkout); if it genuinely cannot be determined, set it to `null` rather than guessing. **A consumer reads the LAST line whose `scope == "whole-repo"`** as the current audit recency.
 
-  **`scope` is the accuracy discriminator and MUST be exactly the string `whole-repo` for a full audit — nothing else means whole-repo.** This skill is also invoked *scoped* (the vetter and producer run it against only a PR's changed files); a scoped run MUST NOT write a `whole-repo` stamp. It either writes no stamp, or a stamp whose `scope` is an explicitly non-whole value — `pr:<number>` (a PR-scoped review) or `paths:<comma-separated globs>` (a path-scoped review). A consumer counts a repo as *fully audited at `auditedAt`* **only** when `scope == "whole-repo"`; every other value (or a missing/partial stamp) means "not fully audited", so a PR-scoped run can never masquerade as a full audit.
-- **`.audit/scope.json`** — the scope manifest that substantiates "full repo": the enumerated whole-repo snapshot.
+  **`scope` is the accuracy discriminator and MUST be exactly the string `whole-repo` for a full audit — nothing else means whole-repo.** This skill is also invoked *scoped* (the vetter and producer run it against only a PR's changed files); a scoped run MUST NOT append a `whole-repo` line. It either appends no line, or a line whose `scope` is an explicitly non-whole value — `pr:<number>` (a PR-scoped review) or `paths:<comma-separated globs>` (a path-scoped review). A consumer counts a repo as *fully audited at `auditedAt`* **only** from the last `scope == "whole-repo"` line; every other value (or an empty/absent file) means "not fully audited", so a PR-scoped run can never masquerade as a full audit.
+- **`.audit/scope.json`** — the scope manifest for the **latest** run (overwritten each run, not appended), substantiating "full repo": the enumerated whole-repo snapshot.
   ```json
   {
-    "auditedAt": "<same as the stamp>",
-    "auditedCommit": "<same as the stamp>",
+    "auditedAt": "<same as the last runs.jsonl line>",
+    "auditedCommit": "<same as the last runs.jsonl line>",
     "files": ["src/…", "test/…", "script/…", "crates/…/src/…", "packages/…/src/…"],
     "countsByLanguage": { "solidity": 0, "rust": 0, "typescript": 0, "svelte": 0 }
   }
   ```
 
-A consumer compares `auditedCommit` to the current default-branch HEAD to tell whether the audit is stale. Commit message: `audit: record run stamp + scope (<skillVersion>)`. Keep `.audit/` **out of** the audit's own file-discovery globs — it is a generated record, not first-party source.
+A consumer compares the last whole-repo line's `auditedCommit` to the current default-branch HEAD to tell whether the audit is stale. Commit message: `audit: append run stamp + scope (<skillVersion>)`. Keep `.audit/` **out of** the audit's own file-discovery globs — it is a generated record, not first-party source.
 
 ## Triage (the one serial, human-in-the-loop stage)
 
