@@ -108,6 +108,7 @@ Review the project's **process/instruction documents** (CLAUDE.md, AGENTS.md, an
 - Instructions fragile under context compression (relying on a subtle distinction).
 - Missing defaults or undefined terms.
 - Inconsistencies between process documents.
+- **License mis-naming:** `LicenseRef-DCL-1.0` is the **DecentraLicense** (canonical name: the first heading of `LICENSES/LicenseRef-DCL-1.0.txt`). Flag any process doc that expands `DCL` to anything else (e.g. "Dark Matter Council License") — a mis-named license misleads every future session and downstream consumer reasoning about the terms.
 
 ### 1. Security
 Review every source file for security issues; consult CLAUDE.md/AGENTS.md for project-specific concerns. The list is "including but not limited to."
@@ -131,6 +132,7 @@ Review all documentation for **completeness and accuracy** against the implement
 - Docs must describe **parameters and return values** (flag docs that omit them).
 - After confirming docs exist, review them **against the implementation for accuracy** — flag docs that contradict, are stale relative to, or misdescribe actual behavior/signature.
 - **README / top-level docs:** does it clearly describe what the project is + its design rationale? Does it reflect the current state (current interface/type names, not stale)? Any dangling references to renamed/removed/external entities that no longer exist?
+- **License naming:** `LicenseRef-DCL-1.0` is the **DecentraLicense**; the canonical name is the first heading in `LICENSES/LicenseRef-DCL-1.0.txt`. Flag any first-party prose (README, NatSpec, comments, CLAUDE.md) that names it anything else — "Dark Matter Council", a loose "Decentralized License", etc. — as a LOW/INFO documentation-accuracy finding. The SPDX id in headers is usually correct; it is the prose expansions that drift.
 
 ### 4. Code quality
 Review for maintainability, consistency, and good abstractions across the whole repo:
