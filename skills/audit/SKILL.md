@@ -1,7 +1,7 @@
 ---
 name: audit
 description: Full codebase audit — seven review dimensions (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface) plus triage. Reviews EVERY source file across all languages as a whole-repo snapshot (not a diff), reports problems (never fixes them, never "works correctly"), severity-rates each, attaches a concrete proposed fix, and tracks findings as GitHub issues; triage then re-validates each finding against live source and applies fixes TDD-style. Triggers on "audit this codebase", "security review", "full audit", "review the whole repo for bugs/coverage/docs/quality/correctness/hazards", "find what's wrong before an external audit".
-version: 0.12.0
+version: 0.16.0
 ---
 
 # Codebase Audit (whole-repo, multi-dimension)
@@ -177,11 +177,25 @@ Categories (starting points, NOT exhaustive — anything fitting the framing que
 Findings are tracked as **GitHub issues** (the durable product record). The orchestrator files them once, after synthesis — not per-agent mid-run.
 
 - **Security-disclosure gate (mandatory):** **CRITICAL and HIGH findings may be exploitable — do NOT auto-file them as public issues.** Present them to the user locally; the user decides whether to file publicly or fix first. Only **MEDIUM / LOW / INFO** are auto-filed.
-- **Issue shape:** Title `[<FindingID>] [<SEVERITY>] <short description>`; Labels `audit`, `pass<N>` (the dimension), and the lowercase severity; Body = description + file path(s)/line(s) + the proposed fix. Ensure the label set exists first (`gh label list`; create any missing from `audit, pass0..pass6, critical, high, medium, low, info`).
+- **Create the label set FIRST (mandatory, before the first `gh issue create`).** `gh issue create --label <name>` **hard-fails when the label does not exist in that repo**, and a repo being audited for the first time usually has none of them. So, once per repo, list what exists and create every missing label before filing anything:
+  ```sh
+  gh label list -R <org>/<repo> --limit 100
+  # for each missing name in: audit pass0 pass1 pass2 pass3 pass4 pass5 pass6 critical high medium low info
+  gh label create <name> -R <org>/<repo> --color 5319E7 --description "Audit finding"   # audit
+  ```
+  **Never recover from a label error by filing the issue unlabelled.** The `audit` label is the only handle downstream tooling has: the `rain-org-health` scan counts a repo's outstanding findings with `gh search issues --label audit`, so an unlabelled finding is **invisible** — the graph reports the repo as having zero audit issues and the finding silently does not exist. If a label genuinely cannot be created (no permission), stop and tell the user rather than filing unlabelled.
+- **Issue shape:** Title `[<FindingID>] [<SEVERITY>] <short description>`; Labels `audit`, `pass<N>` (the dimension), and the lowercase severity; Body = description + file path(s)/line(s) + the proposed fix.
+- **Verify the labels landed.** After filing, re-list (`gh issue list -R <org>/<repo> --label audit --state open`) and confirm every issue you just created is returned. An issue created while its label was missing is silently label-less; if any are, add the labels now (`gh issue edit <n> --add-label audit,...`).
 
 ## Run stamp & scope (per-run record)
 
 Every completed **whole-repo** run **appends** a durable, machine-readable record of *when* the repo was last fully audited and *what* was in scope — so tooling (e.g. the `rain-org-health` scan) can surface each repo's audit recency, and a reader can verify the run was whole-repo (not a diff / PR-scoped review). Write two files at the repo root and commit them to the default branch (open a small PR if it is branch-protected). **Emit them even when the run finds zero issues** — the stamp records the *run*, not the findings.
+
+**The stamp is a completion gate, not a closing formality: an audit whose stamp never lands on the default branch did not happen as far as every consumer is concerned.** The scan reads `.audit/runs.jsonl` (falling back to `.audit/last-run.json`) from the **default branch** — so a repo whose findings were filed but whose stamp was never committed reports as **never audited**, indefinitely, no matter how thorough the run was (precedent: `rain.solmem` had three filed findings and no `.audit/` directory at all). Therefore, before declaring the run complete:
+
+1. **Commit and push the stamp** to the default branch. If the branch is protected, open the small PR *and* say so explicitly in your final report — the run is not finished until that PR is merged, so it must be handed to the user, never left silently open.
+2. **Verify it landed** by reading it back from the default branch, not from your working tree — e.g. `gh api repos/<org>/<repo>/contents/.audit/runs.jsonl --jq .size`. A local write that was never committed/pushed is the exact failure this check exists to catch.
+3. **If the stamp cannot be committed at all** (no write access, protected branch you cannot open a PR against), report that prominently as an incomplete run with the reason. Never finish a run silently unstamped.
 
 - **`.audit/runs.jsonl`** — the stamp, **appended** as one JSON object per line ([JSON Lines](https://jsonlines.org)), newest LAST. Append the new line; **never rewrite or truncate the existing lines.** The file is the repo's audit *history*: each run adds a line rather than clobbering the previous one, so a repo audited at several commits over time keeps every record (audit cadence is preserved, not thrown away), and it matches the org's existing `metrics/runs.jsonl` convention. Append:
   ```json
