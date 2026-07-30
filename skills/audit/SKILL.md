@@ -71,6 +71,8 @@ You do not go looking outside the scope, but a **CRITICAL or HIGH** in a file yo
 
 ### Per-dimension degradation under `pr:<n>` and `paths:`
 
+Every bullet below is worded for a diff because that is the case it was derived from. Under `paths:` there may be no diff at all: read “the change” throughout as **the in-scope files** — the same substitution the ramification limbs already state — so e.g. dimension 2 keys to the behaviours those files implement, and dimension 6 to the categories those files touch. No bullet goes vacuous for want of a diff.
+
 Every dimension runs at every scope unless stated otherwise here. "Runs" narrows in **extent** (which items the dimension is applied to), never in **rigor** — a dimension that says "enumerate, do not sample" still enumerates exhaustively over the narrower set. **No dimension is silently skipped and none is silently widened to the repo**; where a dimension's own unit is not the file, its rule below says what the unit becomes.
 
 - **0. Process** — the narrowest degradation of any dimension. In scope only where the change **contradicts a process claim**, or where it edits a process doc itself. Note the asymmetry: `CLAUDE.md` / `AGENTS.md` are **read at every scope**, because every other dimension needs the conventions they state — reading them is not reviewing them.
@@ -173,7 +175,7 @@ Exclude auto-generated files (bindings, build artifacts, `*.pointers.sol` and si
 
 1. **Survey (orchestrator).** **Resolve the declared scope first** (per **Scope: a declared input**) and state it, then run file discovery once *against that scope*; produce the validated file list — plus, under `pr:<n>` / `paths:`, the ramification set the four limbs admit — and the set of process docs for Pass 0. Read `CLAUDE.md`/`AGENTS.md` and `audit/known-false-positives.md` once and pass their relevant content into agent prompts as context. Every agent prompt carries the declared scope, so a worker cannot widen or narrow it on its own.
 2. **Fan out dimensions in parallel.** Passes 0–5 are independent file reviews: dispatch one `agent({schema})` per **file × dimension** (or per file with the dimension's full checklist), concurrently. Pass 6 partitions by **hazard category, not file** (each agent scans the whole repo for its category — under a scoped run, only the categories the change touches, each still at full cross-file breadth). Each agent reads its file(s) in full and returns schema-validated findings — it does NOT create issues, write files, or order itself. Tier effort: **high** for Security / Correctness / Hazard (and any assembly/`unsafe`/crypto/eval-loop file); **lower** for Docs / naming-style Quality / Process. Some Quality dimensions are repo-global (dependency-version consistency, cross-file style, test-util DRY, de-wrap wrapper-chain detection which must see the whole script→tool graph, and soldeer-dependency staleness which needs one registry query per dep) — give those one repo-wide agent with the full file set rather than per-file agents that can't see duplication.
-3. **Loop until dry.** Re-run a dimension/file until it surfaces no new findings; the hazard categories are explicitly non-exhaustive, so keep scanning and accrue newly-discovered patterns as emergent categories. Convergence is orchestrator-controlled (the file/category list is exhausted and a round adds nothing new), never an agent editing shared state.
+3. **Loop until dry.** Re-run a dimension/file until it surfaces no new findings; the hazard categories are explicitly non-exhaustive, so keep scanning and accrue newly-discovered patterns as emergent categories. Convergence is orchestrator-controlled (the file/category list is exhausted and a round adds nothing new), never an agent editing shared state. The loop is **bounded**: a full round that adds nothing new ends it, and the orchestrator also sets a hard round cap up front (emergent hazard categories accrue within the cap, not past it). Stopping at the cap with categories still accruing is reported as what was NOT swept — no silent caps: truncation named beats coverage implied.
 4. **Synthesize (orchestrator, high effort, after the fan-out returns).** Collect all structured findings (`.filter(Boolean)`), dedup (cross-category overlaps, e.g. the same duplicate under both "multiple sources of truth" and "configuration spread"; and against `known-false-positives.md` + existing audit issues), and assign stable IDs. A worker's "clean" is an input to audit, not a verdict to relay.
 5. **Apply the security-disclosure gate, then output.** See "Findings → issues" below.
 
@@ -297,10 +299,12 @@ A **scoped** (`pr:<n>` / `paths:`) run's default is to write **nothing** under `
   {
     "auditedAt": "<same as the last whole-repo runs.jsonl line>",
     "auditedCommit": "<same as the last whole-repo runs.jsonl line>",
-    "files": ["src/…", "test/…", "script/…", "crates/…/src/…", "packages/…/src/…"],
+    "files": ["CLAUDE.md", "src/…", "test/…", "script/…", "crates/…/src/…", "packages/…/src/…", ".github/workflows/…", "*.sh"],
     "countsByLanguage": { "solidity": 0, "rust": 0, "typescript": 0, "svelte": 0 }
   }
   ```
+
+  `files` enumerates **every audited input**, not just source: process docs (`CLAUDE.md`/`AGENTS.md`), shell and CI glue (§4 #9–#10), and workflows are all reviewed, so they are all manifested — a manifest that lists only source under-states what the run actually read.
 
 A consumer decides staleness by whether any **first-party source** changed since `auditedCommit`, comparing the trees **excluding `.audit/`** — NOT a bare `auditedCommit == HEAD` check. The run's own stamp commit advances HEAD while touching only `.audit/`, so a bare SHA comparison would report *every* fresh audit as immediately stale; the audit is current when the only changes since `auditedCommit` are under `.audit/`. Commit message: `audit: append run stamp + scope (<skillVersion>)`. Keep `.audit/` **out of** the audit's own file-discovery globs — it is a generated record, not first-party source.
 
