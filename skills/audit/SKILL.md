@@ -1,7 +1,7 @@
 ---
 name: audit
 description: Codebase audit — seven review dimensions (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface) plus triage. Runs at a DECLARED scope — `whole-repo` (every source file across all languages), `pr:<number>` (the diff plus its ramifications: callees, callers, siblings, and every claim the PR makes) or `paths:<globs>` — and is never diff-only at any of them. Reports problems (never fixes them, never "works correctly"), severity-rates each, attaches a concrete proposed fix, and tracks whole-repo findings as GitHub issues; triage then re-validates each finding against live source and applies fixes TDD-style. Triggers on "audit this codebase", "security review", "full audit", "review the whole repo for bugs/coverage/docs/quality/correctness/hazards", "review this PR's diff plus its ramifications", "find what's wrong before an external audit".
-version: 0.24.0
+version: 0.25.0
 ---
 
 # Codebase Audit (multi-dimension, declared scope)
