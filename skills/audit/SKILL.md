@@ -1,12 +1,12 @@
 ---
 name: audit
-description: Full codebase audit — seven review dimensions (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface) plus triage. Reviews EVERY source file across all languages as a whole-repo snapshot (not a diff), reports problems (never fixes them, never "works correctly"), severity-rates each, attaches a concrete proposed fix, and tracks findings as GitHub issues; triage then re-validates each finding against live source and applies fixes TDD-style. Triggers on "audit this codebase", "security review", "full audit", "review the whole repo for bugs/coverage/docs/quality/correctness/hazards", "find what's wrong before an external audit".
-version: 0.19.0
+description: Codebase audit — seven review dimensions (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface) plus triage. Runs at a DECLARED scope — `whole-repo` (every source file across all languages), `pr:<number>` (the diff plus its ramifications: callees, callers, siblings, and every claim the PR makes) or `paths:<globs>` — and is never diff-only at any of them. Reports problems (never fixes them, never "works correctly"), severity-rates each, attaches a concrete proposed fix, and tracks whole-repo findings as GitHub issues; triage then re-validates each finding against live source and applies fixes TDD-style. Triggers on "audit this codebase", "security review", "full audit", "review the whole repo for bugs/coverage/docs/quality/correctness/hazards", "review this PR's diff plus its ramifications", "find what's wrong before an external audit".
+version: 0.22.0
 ---
 
-# Codebase Audit (whole-repo, multi-dimension)
+# Codebase Audit (multi-dimension, declared scope)
 
-An audit is **seven review dimensions** over the whole codebase, then **triage**:
+An audit is **seven review dimensions** over the code in the **declared scope** (see **Scope: a declared input**), then **triage**:
 
 - **0. Process** — the project's instruction docs (CLAUDE.md/AGENTS.md/etc.) for things a future session would misread.
 - **1. Security** — vulnerabilities.
@@ -20,11 +20,69 @@ An audit is **seven review dimensions** over the whole codebase, then **triage**
 Two rules sit above everything and never bend:
 
 - **Findings are PROBLEMS, not fixes.** A finding must identify something **wrong, missing, or that could go wrong**. Correct behavior is NOT a finding at any severity — never report "X works correctly" or "no issues found". (A *proposed fix* rides along on each finding, but the finding is the problem, not the patch. Fixes are only *applied* in triage.)
-- **Whole-repo snapshot, never a diff.** Every source file is in scope regardless of when it last changed. Do not scope by recent changes / PR diff.
+- **Never diff-only.** A review is never bounded by the changed lines, at any scope. What is in scope is the **declared scope** (`whole-repo`, `pr:<number>`, `paths:<globs>` — one definition, in **Scope: a declared input** below): under `whole-repo` that is every source file regardless of when it last changed; under `pr:<n>` / `paths:` it is the declared unit **plus its ramifications** — the callees, callers, siblings and claims defined there. The changed lines alone are never sufficient: `rainlanguage/raindex#2778`'s claim that a `signer<256>` operand silently resolves to row 0 was falsified only by reading the callee, which **reverts**. **The scope bounds what is REPORTED, never what is READ.** Recency is not a scope — there is no "only what changed lately" mode.
 
 **Run this in ultracode — native Workflow orchestration.** This skill is written for ultracode: an audit is a **fan-out** driven by the native Workflow tool — `agent()` / `parallel()` / `pipeline()`, schema-forced structured findings, and `budget`. The dimensions above are largely **independent file reviews, so fan them out in parallel** (one agent per file × dimension; Pass 6 is the exception — partitioned by category, not file). Let the runtime own concurrency, fan-out, and ordering; the **orchestrator** (the agent authoring the Workflow) owns the file survey, the synthesis/dedup, the security-disclosure gate, and the human-in-the-loop triage loop. Agents review files with clean contexts and **return schema-validated findings** — they do not file issues, write to disk, or hand off between stages.
 
 > This consolidates what used to be nine separate skills run by one conversation. The old machinery — strictly-sequential passes, manual `Agent`-tool dispatch, `A01..` agent IDs for ordering, an "evidence-of-reading" preamble, and filing each finding to GitHub *during* the pass "because context compacts" — all existed only to fit a single context window with a primitive fan-out. Native ultracode removes every one of those constraints: clean per-agent contexts, runtime-owned fan-out/ordering, and structured findings that survive natively. Keep the **review substance** below; drop that scaffolding.
+
+## Scope: a declared input
+
+**Scope is an input the caller declares — not a mode you remember being in, and not free text in an args string that nothing can validate.** It is exactly one of three literals, and there are no others:
+
+- **`whole-repo`** — the subject is the repository. Unit of review: **every first-party file** the discovery globs enumerate, regardless of when it last changed.
+- **`pr:<number>`** — the subject is one pull request (`pr:21`). Unit of review: **the diff PLUS its ramifications**, defined below.
+- **`paths:<comma-separated globs>`** — the subject is a named part of the repo (`paths:src/lib/**,test/lib/**`). Unit of review: **every first-party file matching the globs, PLUS their ramifications.**
+
+Those three strings are the entire vocabulary. They are what a caller passes, what the per-scope rules below key off, and what the run stamp records verbatim (see **Run stamp & scope**) — **one definition, referenced everywhere, restated nowhere.** "Recently changed", "the files I was handed", "the interesting parts" are not scopes.
+
+**Resolving the scope when the caller declared none.** A declared scope always wins. With none declared, resolve it by this rule — not from the request's tone — and **state the resolved scope as the first line of your output**, before reading any source:
+
+1. the request identifies a pull request (number, URL, or the branch under review) → **`pr:<number>`**;
+2. else it names files / directories / globs → **`paths:<globs>`**;
+3. else the subject is the repository → **`whole-repo`**.
+
+A request whose subject is a pull request NEVER resolves to `whole-repo`. That substitution is the measured failure this section exists to prevent: asked to review `rainlanguage/rain.deploy#21`, a run went whole-repo and returned twelve findings — five bearing on the PR, seven in pre-existing code the diff never touches — leaving the reader to re-derive which were which. A whole-repo audit is a legitimate thing to want, but it is a thing someone **asks for**, never the by-product of an undeclared PR review.
+
+### The scope bounds what is REPORTED, never what is READ
+
+Every per-scope rule below follows from this one sentence. Reading is always wider than reporting: you read whatever it takes to rule correctly on the code in scope, and you report only findings **about** the code in scope. A scoped run therefore reads outside its scope constantly and by design — that is not scope creep. *Reporting* outside it is.
+
+### Ramifications (the widening under `pr:<n>` and `paths:`)
+
+The scoped unit is never the changed lines alone. Add — and read **in full**, per the Shared rules — every file that passes the inclusion test *"would understanding this file change the ruling on THIS diff?"*. Four limbs, all mandatory:
+
+1. **Callees** — everything the changed lines invoke, **following into dependency repos** (soldeer `lib/`, crates, `node_modules`) wherever the changed code's correctness depends on what they do. A changed line is a *claim about* its callees; the callee is where the claim is settled.
+2. **Callers** — every site relying on the behaviour the change alters. Grep the changed symbols repo-wide; a semantics change whose callers went unread is a review that did not happen.
+3. **Siblings** — the other implementations sharing the invariant the change touches (the contract family, the co-implementors of an interface, the parallel per-network / per-token variant). A fix applied to one family member and not its siblings is a finding the diff itself cannot show you.
+4. **Claims** — every **current-behaviour** claim in the PR body, its commit messages, and the linked issue, verified against real source. A claim is not evidence; the source is. Read the linked issue in full — its claims are in scope even where the diff never mentions them.
+
+**Never the diff alone.** The canonical miss is `rainlanguage/raindex#2778`: its claim that a `signer<256>` operand silently resolves to row 0 was falsified only by reading the callee, which **reverts**. A diff-only lens returns clean on that PR *structurally*, not through carelessness — the evidence is not in the diff.
+
+**Never a whole-repo sweep either.** Under `pr:<n>`, a finding in code the change neither alters, nor calls, nor is called by, nor shares an invariant with, nor makes a claim about, is **out of scope for the ruling**. It belongs to a `whole-repo` run.
+
+**`paths:` is not a place to hide a diff.** Globs that are exactly a PR's changed-file list are a diff-only review wearing a path scope: declare `pr:<n>` and take the ramifications. Conversely, under `paths:` the four limbs admit files **outside** the globs — the globs bound what you report, per above.
+
+### What you never withhold
+
+You do not go looking outside the scope, but a **CRITICAL or HIGH** in a file you had to read anyway is never dropped for being out of scope. Report it, explicitly labelled out-of-scope-for-this-review, under the same security-disclosure gate as everything else (see **Findings → issues**). The scope decides what the *ruling* is about; it never licenses silence about an exploitable bug already in hand.
+
+### Per-dimension degradation under `pr:<n>` and `paths:`
+
+Every dimension runs at every scope unless stated otherwise here. "Runs" narrows in **extent** (which items the dimension is applied to), never in **rigor** — a dimension that says "enumerate, do not sample" still enumerates exhaustively over the narrower set. **No dimension is silently skipped and none is silently widened to the repo**; where a dimension's own unit is not the file, its rule below says what the unit becomes.
+
+- **0. Process** — the narrowest degradation of any dimension. In scope only where the change **contradicts a process claim**, or where it edits a process doc itself. Note the asymmetry: `CLAUDE.md` / `AGENTS.md` are **read at every scope**, because every other dimension needs the conventions they state — reading them is not reviewing them.
+- **1. Security** — runs over the in-scope files and their ramifications; the finding is a vulnerability the change **introduces**, or one it leaves open on a path it touches. The **ERC-7201 storage-compliance** block is inheritance-chain-wide by construction: if the change reaches a namespaced-storage contract, the whole chain **and the previous struct layout** are ramifications, since append-only cannot be judged from the new layout alone.
+- **2. Test coverage** — keyed to **behaviour**, not to files: every behaviour the change adds, alters, or newly relies on needs a test that exercises it — error paths, boundaries, and a re-derivation test for every derived constant the change introduces. Reading the in-scope files' existing tests is mandatory at every scope. A pre-existing untested function the change does not touch is **not this review's finding**, even when it sits in a file you read in full.
+- **3. Documentation** — enumerate every public item the change **adds, or whose signature or behaviour it alters**, one by one, and check each is documented and accurate: exhaustive over that set, no sampling. Add the docs *elsewhere* that describe the changed behaviour and are now stale — interface NatSpec, README, the PR body, the linked issue. A repo-wide undocumented-API census is out of scope.
+- **4. Code quality** — split by check; no check is dropped. The per-file ones (#2, #3, #6, #7, #8, #9, #12, plus the Shared rules' Solidity naming and convention rules) apply to the in-scope files. The repo-global ones **read wide and report narrow**: #1 must still establish the convention from the widest scope observable — that is the whole point of #1 — but reports only where the change deviates; #10's wrapper-chain detection must still see the whole script→tool graph but reports only a wrapper the change adds or feeds; #5 and #11 fire only where the change touches a dependency pin or version, since an unrelated stale pin is not this review's business; #4 means the build warnings the change itself introduces. One explicit **non**-degradation: #6's completeness clause (enumerate the bare imports across `src/`, `test/` **AND** `script/`) is a **whole-repo** obligation — a scoped run reports the bare imports the change adds and must NOT claim the category is discharged.
+- **5. Correctness / intent** — does not degrade in kind. It is the dimension a change review most needs and the one `raindex#2778` was missed by: every limb applies to each named item the change adds or alters. The **Claims** ramification limb is an *addition* under a scoped run that `whole-repo` has no analogue for — the PR body and the linked issue are themselves claims to verify against source.
+- **6. Hazard surface** — the one dimension whose unit is not the file, so it needs its own rule. First decide which categories the change **touches**: does it add a second copy of a fact (cat. 1), add or reorder a step whose order is unenforced (2), add a convention or derived constant with no check (3), add configuration that must agree elsewhere (4), touch a generated artifact (5), change something another repo or language consumes (6), add a manual step (7), add a default resting on an unpinned property (8), or change a deploy path or release record (9)? Run **those** categories at their **full cross-file breadth** — a category scan that stops at the diff cannot see the second source of truth, which is the entire reason this dimension partitions by category rather than by file. Do not run the untouched categories, and do not silently widen to all nine. The four-part naming requirement is unchanged, and part (3), the realistic scenario, must be one the change makes possible or likelier.
+- **Triage** — a `whole-repo` stage in practice: it is a human-in-the-loop loop over **filed audit issues**. A scoped run's findings go to its caller and the fix belongs in the change under review, so there is nothing for triage to loop over. Where a scoped run did file issues (see below), triage them exactly as written.
+
+### Output per scope
+
+**Findings → issues** below is written for `whole-repo`, and that is the only scope which files `audit`-labelled issues by default: the `audit` label is the repository's outstanding-audit ledger (the `rain-org-health` scan counts it), and a review of one change is not a fact about the repository's audit surface. A scoped run **returns its findings to its caller** — the review or verdict is the product. If the caller explicitly asks for issues, file them and name the declared scope in every body, so no scoped finding reads as whole-repo coverage. The security-disclosure gate applies unchanged and covers publication generally: a **CRITICAL/HIGH** never goes into a public PR comment any more than into a public issue.
 
 ## Shared rules (every dimension inherits these)
 
@@ -35,6 +93,8 @@ Two rules sit above everything and never bend:
 - Svelte: `packages/*/src/**/*.svelte`
 
 Exclude auto-generated files (bindings, build artifacts, `*.pointers.sol` and similar codegen), vendored deps (`lib/`, `node_modules/`), and lock files. When unsure whether a dir is first-party, check for a `Cargo.toml` / `package.json` / manifest. Every dimension reviews **every** language; a dimension's language-specific checklist items apply only to files of that language. The code-quality **de-bash / de-wrap** sub-checks (§4 #9–#10) additionally cover shell and CI glue — `**/*.sh`, `Makefile` / `*.mk`, `justfile`, `package.json` scripts, and inline CI `run:` blocks — so glob those into the survey too (they are otherwise out of scope for the source dimensions).
+
+**Discovery is filtered by the declared scope.** The globs above enumerate the *candidate* first-party universe; the set actually **reviewed** is that universe filtered per **Scope: a declared input** — every candidate under `whole-repo`; the changed files plus their ramifications under `pr:<n>`; the glob-matching candidates plus their ramifications under `paths:`. The ramification limbs may pull in files the candidate globs exclude (a dependency under `lib/`, a generated pointer file a claim rests on): read them, since the scope bounds reporting rather than reading — a file admitted only as a ramification is context for the ruling, not a review target of its own. `CLAUDE.md` / `AGENTS.md` are read at **every** scope.
 
 **Read in full.** Every assigned file is read top-to-bottom. Grep is for *cross-referencing* (is this name used in tests? does this constant appear elsewhere?), never a substitute for reading code.
 
@@ -99,8 +159,8 @@ Exclude auto-generated files (bindings, build artifacts, `*.pointers.sol` and si
 
 ## Running the audit as a fan-out
 
-1. **Survey (orchestrator).** Run file discovery once; produce the validated file list (and the set of process docs for Pass 0). Read `CLAUDE.md`/`AGENTS.md` and `audit/known-false-positives.md` once and pass their relevant content into agent prompts as context.
-2. **Fan out dimensions in parallel.** Passes 0–5 are independent file reviews: dispatch one `agent({schema})` per **file × dimension** (or per file with the dimension's full checklist), concurrently. Pass 6 partitions by **hazard category, not file** (each agent scans the whole repo for its category). Each agent reads its file(s) in full and returns schema-validated findings — it does NOT create issues, write files, or order itself. Tier effort: **high** for Security / Correctness / Hazard (and any assembly/`unsafe`/crypto/eval-loop file); **lower** for Docs / naming-style Quality / Process. Some Quality dimensions are repo-global (dependency-version consistency, cross-file style, test-util DRY, de-wrap wrapper-chain detection which must see the whole script→tool graph, and soldeer-dependency staleness which needs one registry query per dep) — give those one repo-wide agent with the full file set rather than per-file agents that can't see duplication.
+1. **Survey (orchestrator).** **Resolve the declared scope first** (per **Scope: a declared input**) and state it, then run file discovery once *against that scope*; produce the validated file list — plus, under `pr:<n>` / `paths:`, the ramification set the four limbs admit — and the set of process docs for Pass 0. Read `CLAUDE.md`/`AGENTS.md` and `audit/known-false-positives.md` once and pass their relevant content into agent prompts as context. Every agent prompt carries the declared scope, so a worker cannot widen or narrow it on its own.
+2. **Fan out dimensions in parallel.** Passes 0–5 are independent file reviews: dispatch one `agent({schema})` per **file × dimension** (or per file with the dimension's full checklist), concurrently. Pass 6 partitions by **hazard category, not file** (each agent scans the whole repo for its category — under a scoped run, only the categories the change touches, each still at full cross-file breadth). Each agent reads its file(s) in full and returns schema-validated findings — it does NOT create issues, write files, or order itself. Tier effort: **high** for Security / Correctness / Hazard (and any assembly/`unsafe`/crypto/eval-loop file); **lower** for Docs / naming-style Quality / Process. Some Quality dimensions are repo-global (dependency-version consistency, cross-file style, test-util DRY, de-wrap wrapper-chain detection which must see the whole script→tool graph, and soldeer-dependency staleness which needs one registry query per dep) — give those one repo-wide agent with the full file set rather than per-file agents that can't see duplication.
 3. **Loop until dry.** Re-run a dimension/file until it surfaces no new findings; the hazard categories are explicitly non-exhaustive, so keep scanning and accrue newly-discovered patterns as emergent categories. Convergence is orchestrator-controlled (the file/category list is exhausted and a round adds nothing new), never an agent editing shared state.
 4. **Synthesize (orchestrator, high effort, after the fan-out returns).** Collect all structured findings (`.filter(Boolean)`), dedup (cross-category overlaps, e.g. the same duplicate under both "multiple sources of truth" and "configuration spread"; and against `known-false-positives.md` + existing audit issues), and assign stable IDs. A worker's "clean" is an input to audit, not a verdict to relay.
 5. **Apply the security-disclosure gate, then output.** See "Findings → issues" below.
@@ -109,6 +169,8 @@ Exclude auto-generated files (bindings, build artifacts, `*.pointers.sol` and si
 `{ id, dimension (0..6), severity (CRITICAL|HIGH|MEDIUM|LOW|INFO), file, lines, language, description, proposedFix }`.
 
 ## The review dimensions
+
+Each dimension below is written at its **full `whole-repo` extent**. Under `pr:<n>` / `paths:` every one of them is filtered by the declared scope, and **Per-dimension degradation** in **Scope: a declared input** governs how — nothing in this section silently overrides it, and no dimension carries its own competing scope rule.
 
 ### 0. Process review
 Review the project's **process/instruction documents** (CLAUDE.md, AGENTS.md, and anything they reference), NOT source code, for defects that would cause a future session to misinterpret instructions:
@@ -184,7 +246,7 @@ Categories (starting points, NOT exhaustive — anything fitting the framing que
 
 ## Findings → issues (output)
 
-Findings are tracked as **GitHub issues** (the durable product record). The orchestrator files them once, after synthesis — not per-agent mid-run.
+Findings from a **`whole-repo`** run are tracked as **GitHub issues** (the durable product record). The orchestrator files them once, after synthesis — not per-agent mid-run. A scoped run returns its findings to its caller instead and files nothing unless asked; see **Output per scope**. The security-disclosure gate below binds at every scope.
 
 - **Security-disclosure gate (mandatory):** **CRITICAL and HIGH findings may be exploitable — do NOT auto-file them as public issues.** Present them to the user locally; the user decides whether to file publicly or fix first. Only **MEDIUM / LOW / INFO** are auto-filed.
 - **Create the label set FIRST (mandatory, before the first `gh issue create`).** `gh issue create --label <name>` **hard-fails when the label does not exist in that repo**, and a repo being audited for the first time usually has none of them. So, once per repo, list what exists and create every missing label before filing anything:
@@ -199,7 +261,11 @@ Findings are tracked as **GitHub issues** (the durable product record). The orch
 
 ## Run stamp & scope (per-run record)
 
-Every completed **whole-repo** run **appends** a durable, machine-readable record of *when* the repo was last fully audited and *what* was in scope — so tooling (e.g. the `rain-org-health` scan) can surface each repo's audit recency, and a reader can verify the run was whole-repo (not a diff / PR-scoped review). Write two files at the repo root and commit them to the default branch (open a small PR if it is branch-protected). **Emit them even when the run finds zero issues** — the stamp records the *run*, not the findings.
+**The stamp records the scope the run DECLARED** (the three literals defined in **Scope: a declared input** — this section adds no vocabulary of its own and defines nothing about scope). It is written from that declared value, never re-derived at write time from which mode you recall having been in.
+
+Every completed **`whole-repo`** run **appends** a durable, machine-readable record of *when* the repo was last fully audited and *what* was in scope — so tooling (e.g. the `rain-org-health` scan) can surface each repo's audit recency, and a reader can verify the run was whole-repo rather than scoped. Write two files at the repo root and commit them to the default branch (open a small PR if it is branch-protected). **Emit them even when the run finds zero issues** — the stamp records the *run*, not the findings.
+
+A **scoped** (`pr:<n>` / `paths:`) run's default is to write **nothing** under `.audit/`: audit recency is a fact about the repository, and a review of one change is not one. It writes there only when its caller asks for a per-run record, and then only the `runs.jsonl` line described below carrying its own declared scope string — **never** `scope.json`, and **never** a `whole-repo` line. Everything from here to the end of this section therefore describes the `whole-repo` run unless it says otherwise.
 
 **The stamp is a completion gate, not a closing formality: an audit whose stamp never lands on the default branch did not happen as far as every consumer is concerned.** The scan reads `.audit/runs.jsonl` (falling back to `.audit/last-run.json`) from the **default branch** — so a repo whose findings were filed but whose stamp was never committed reports as **never audited**, indefinitely, no matter how thorough the run was (precedent: `rain.solmem` had three filed findings and no `.audit/` directory at all). Therefore, before declaring the run complete:
 
@@ -213,8 +279,8 @@ Every completed **whole-repo** run **appends** a durable, machine-readable recor
   ```
   `auditedAt` is UTC ISO-8601 at run completion; `auditedCommit` is the SHA the Survey snapshot was taken at; `fileCount` is the number of first-party files reviewed. `skillVersion` is the skill's declared version; **`skillCommit` is the exact `rainlanguage/claude-audit-skills` commit the running skill was installed from** — the precise, unambiguous record of *which audit-skill code produced this audit* (a version string like `0.11.0` can map to many commits, or to a dev/uncommitted state). Resolve it from the plugin's install / marketplace metadata (or `git rev-parse HEAD` in the skill's source checkout); if it genuinely cannot be determined, set it to `null` rather than guessing. **A consumer reads the LAST line whose `scope == "whole-repo"`** as the current audit recency.
 
-  **`scope` is the accuracy discriminator and MUST be exactly the string `whole-repo` for a full audit — nothing else means whole-repo.** This skill is also invoked *scoped* (the vetter and producer run it against only a PR's changed files); a scoped run MUST NOT append a `whole-repo` line. It either appends no line, or a line whose `scope` is an explicitly non-whole value — `pr:<number>` (a PR-scoped review) or `paths:<comma-separated globs>` (a path-scoped review). A consumer counts a repo as *fully audited at `auditedAt`* **only** from the last `scope == "whole-repo"` line; every other value (or an empty/absent file) means "not fully audited", so a PR-scoped run can never masquerade as a full audit.
-- **`.audit/scope.json`** — the scope manifest for the latest **whole-repo** run, substantiating "full repo": the enumerated whole-repo snapshot. Overwritten by whole-repo runs **only** — a scoped (`pr:`/`paths:`) run MUST NOT touch it, so it always corresponds to the last `whole-repo` line in `runs.jsonl` (its `auditedCommit` matches that line, never a scoped run's partial file list).
+  **`scope` is the run's declared scope, copied verbatim** — one of the three literals from **Scope: a declared input**, and nothing else is a legal value. It is the accuracy discriminator: **only the exact string `whole-repo` means a full audit**, and a run whose declared scope was anything else MUST NOT write that string, whatever the run happened to read along the way (ramifications widen the *reading*, never the declared scope). A consumer counts a repo as *fully audited at `auditedAt`* **only** from the last `scope == "whole-repo"` line; every other value (or an empty/absent file) means "not fully audited", so a scoped run can never masquerade as a full audit.
+- **`.audit/scope.json`** — the scope manifest for the latest **`whole-repo`** run, substantiating "full repo": the enumerated whole-repo snapshot. Overwritten by `whole-repo` runs **only** — a scoped run MUST NOT touch it, so it always corresponds to the last `whole-repo` line in `runs.jsonl` (its `auditedCommit` matches that line, never a scoped run's partial file list).
   ```json
   {
     "auditedAt": "<same as the last whole-repo runs.jsonl line>",
@@ -240,7 +306,7 @@ Triage is the terminal stage and the **only** one that mutates code/docs. Keep i
 ## Principles
 
 - **Findings are problems, not fixes; correct behavior is never a finding.** Never report "X works correctly" / "no issues found".
-- **Whole-repo snapshot, every file, every language — never scoped by diff or recency.**
+- **Scope is declared, one of `whole-repo` / `pr:<number>` / `paths:<globs>` — and the review is never diff-only at any of them.** Under `whole-repo`, every file of every language, regardless of when it last changed; under a scoped run, the declared unit **plus its ramifications**. Recency is never a scope, and **the scope bounds what is reported, never what is read.**
 - **Read in full; grep only to cross-reference.**
 - **Every LOW+ finding ships a concrete, audit-grade proposed fix** (real diff / complete test), authored at finding time so triage has it ready — but applied only in triage.
 - **CRITICAL/HIGH are never auto-filed publicly** — surface to the owner first.
