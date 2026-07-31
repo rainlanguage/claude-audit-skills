@@ -1,7 +1,7 @@
 ---
 name: audit
 description: Codebase audit — seven review dimensions (process, security, test coverage, documentation, code quality, correctness/intent, hazard surface) plus triage. Runs at a DECLARED scope — `whole-repo` (every source file across all languages), `pr:<number>` (the diff plus its ramifications: callees, callers, siblings, and every claim the PR makes) or `paths:<globs>` — and is never diff-only at any of them. Reports problems (never fixes them, never "works correctly"), severity-rates each, attaches a concrete proposed fix, and tracks whole-repo findings as GitHub issues; triage then re-validates each finding against live source and applies fixes TDD-style. Triggers on "audit this codebase", "security review", "full audit", "review the whole repo for bugs/coverage/docs/quality/correctness/hazards", "review this PR's diff plus its ramifications", "find what's wrong before an external audit".
-version: 0.30.0
+version: 0.31.0
 ---
 
 # Codebase Audit (multi-dimension, declared scope)
@@ -89,6 +89,9 @@ Every dimension runs at every scope unless stated otherwise here. "Runs" narrows
 **Findings → issues** below is written for `whole-repo`, and that is the only scope which files `audit`-labelled issues by default: the `audit` label is the repository's outstanding-audit ledger (the `rain-org-health` scan counts it), and a review of one change is not a fact about the repository's audit surface. A scoped run **returns its findings to its caller** — the review or verdict is the product. If the caller explicitly asks for issues, file them and name the declared scope in every body, so no scoped finding reads as whole-repo coverage. The **security-disclosure gate** applies unchanged at every scope, as stated where it is defined.
 
 ## Shared rules (every dimension inherits these)
+
+**Interpretation — examples never close a rule (this clause governs the whole document).** Every example, enumeration, mapping table, and "e.g." list in this skill ILLUSTRATES the category its rule names; none of them bounds it. Read every list as *including, without limitation*: a candidate that fits a rule's framing sentence is IN scope even when no example resembles it, and absence from an example list is never an argument against a finding — the rules are the categories, the examples are how a past reader recognized them, and the set of examples grows precisely because earlier readers treated the categories as open. Where a rule intends a CLOSED set it must say so in words — "exactly one of", "the entire vocabulary", "those three checks are the entire gate", "nothing else is a legal value" — and only such declarations close anything; the scope literals, the mutation-ledger gate's evidence checks, and its outcome literals are examples of sets closed this way. Per-rule spellings of this clause ("non-exhaustive", "including but not limited to", "starting points, NOT exhaustive") are reminders of it, not its source: a rule that omits the reminder is still governed by this clause.
+
 
 **File discovery — ALL languages, no language-specific passes.** First read `CLAUDE.md` / `AGENTS.md` for project structure and conventions. Then glob every first-party source tree:
 - Solidity: `src/**/*.sol`
